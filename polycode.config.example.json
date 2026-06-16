@@ -1,0 +1,9 @@
+{
+  "$comment": "Copy to polycode.config.json (cwd) or ~/.config/polycode/config.json. Providers: openai | google | xai. CONFIRM model IDs against current OpenAI/Google/xAI docs — these are placeholders as of mid-2026. Example xai tier: { \"provider\": \"xai\", \"model\": \"grok-4\" }.",
+  "system": "You are polycode, a terminal coding agent. Be concise. Use tools to inspect and edit the project. Prefer the smallest change that solves the task.",
+  "tiers": {
+    "cheap":  { "provider": "google", "model": "gemini-2.5-flash" },
+    "strong": { "provider": "openai", "model": "gpt-5" },
+    "long":   { "provider": "google", "model": "gemini-2.5-pro" }
+  }
+}

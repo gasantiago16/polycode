@@ -1,0 +1,106 @@
+// Canonical, provider-agnostic types.
+//
+// The agent loop, tools, permission engine, and UI only ever see these.
+// Every provider quirk (OpenAI vs Gemini message shapes, tool-call formats,
+// stop reasons, reasoning channels) is normalized to/from these types inside
+// a provider adapter and never leaks upward.
+
+export type Role = "system" | "user" | "assistant" | "tool";
+
+export interface TextPart {
+  type: "text";
+  text: string;
+}
+export interface ReasoningPart {
+  type: "reasoning";
+  text: string;
+}
+export interface ToolCallPart {
+  type: "tool_call";
+  id: string;
+  name: string;
+  input: unknown;
+}
+export interface ToolResultPart {
+  type: "tool_result";
+  id: string; // matches the originating ToolCallPart.id
+  name: string;
+  output: string;
+  isError?: boolean;
+}
+export type ContentPart = TextPart | ReasoningPart | ToolCallPart | ToolResultPart;
+
+export interface CanonicalMessage {
+  role: Role;
+  content: ContentPart[];
+}
+
+export type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "error";
+
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** Streaming events the agent loop consumes, regardless of provider. */
+export type CanonicalEvent =
+  | { type: "text_delta"; text: string }
+  | { type: "reasoning_delta"; text: string }
+  | { type: "tool_call"; call: ToolCallPart }
+  | { type: "stop"; reason: StopReason; usage?: Usage }
+  | { type: "error"; error: string };
+
+export type PermissionClass = "safe" | "mutating" | "dangerous";
+
+export interface ToolRunResult {
+  output: string;
+  isError?: boolean;
+}
+
+export interface ToolContext {
+  cwd: string;
+  signal?: AbortSignal;
+}
+
+export interface ToolSpec {
+  name: string;
+  description: string;
+  /** JSON Schema describing the tool input (authored by hand or via zod). */
+  parameters: Record<string, unknown>;
+  /** Drives the permission engine. */
+  permission: PermissionClass;
+  /** Read-only tools may be executed concurrently. */
+  parallelSafe: boolean;
+  run(input: any, ctx: ToolContext): Promise<ToolRunResult>;
+}
+
+/** What a model can do — the loop reads this to budget context, etc. */
+export interface Capabilities {
+  contextWindow: number;
+  maxOutput: number;
+  supportsTools: boolean;
+  supportsReasoning: boolean;
+  supportsCaching: boolean;
+  supportsVision: boolean;
+  parallelTools: boolean;
+}
+
+export interface GenerateRequest {
+  system?: string;
+  messages: CanonicalMessage[];
+  tools: ToolSpec[];
+  maxOutputTokens?: number;
+  reasoningEffort?: "low" | "medium" | "high";
+  signal?: AbortSignal;
+}
+
+/** The seam that makes "multiple API models" tractable. */
+export interface Provider {
+  /** Stable provider id, e.g. "openai" | "google". */
+  id: string;
+  /** Resolved model id, e.g. "gpt-5" | "gemini-2.5-pro". */
+  model: string;
+  capabilities(): Capabilities;
+  stream(req: GenerateRequest): AsyncIterable<CanonicalEvent>;
+  countTokens?(req: GenerateRequest): Promise<number>;
+}
