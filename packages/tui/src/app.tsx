@@ -8,6 +8,7 @@ import {
   type Provider,
   type ToolSpec,
 } from "@polycode/core";
+import { configured, backendName } from "@polycode/secrets";
 
 type LineKind = "system" | "user" | "assistant" | "tool" | "error";
 interface Line {
@@ -22,6 +23,8 @@ export interface AppProps {
   system?: string;
   /** Supplied by the CLI so `/model openai:gpt-5` can rebuild a Provider. */
   onModelSwitch?: (arg: string) => Provider;
+  /** Re-open the secure key setup screen (`/login`). */
+  onLogin?: () => void;
 }
 
 interface PendingPerm {
@@ -30,7 +33,7 @@ interface PendingPerm {
   resolve: (allow: boolean) => void;
 }
 
-export function App({ provider, tools, cwd, system, onModelSwitch }: AppProps) {
+export function App({ provider, tools, cwd, system, onModelSwitch, onLogin }: AppProps) {
   const { exit } = useApp();
   const [lines, setLines] = useState<Line[]>([
     {
@@ -117,7 +120,19 @@ export function App({ provider, tools, cwd, system, onModelSwitch }: AppProps) {
     if (v === "/help") {
       add({
         kind: "system",
-        text: "/model <provider:model> · /mode <plan|ask|acceptEdits|yolo> · /exit",
+        text: "/model <provider:model> · /mode <plan|ask|acceptEdits|yolo> · /login · /keys · /exit",
+      });
+      return;
+    }
+    if (v === "/login") {
+      if (onLogin) return onLogin();
+      return add({ kind: "error", text: "key setup unavailable" });
+    }
+    if (v === "/keys") {
+      const have = configured();
+      add({
+        kind: "system",
+        text: `keys (${backendName()}): ${have.length ? have.join(", ") : "none — run /login"}`,
       });
       return;
     }

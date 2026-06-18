@@ -7,10 +7,15 @@
   "scripts": {
     "dev": "tsx packages/cli/src/index.ts",
     "serve": "tsx packages/cli/src/index.ts --serve",
+    "smoke": "tsx scripts/smoke.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsup"
   },
   "devDependencies": {
+    "@polycode/core": "workspace:*",
+    "@polycode/providers": "workspace:*",
+    "@polycode/secrets": "workspace:*",
+    "@polycode/tools": "workspace:*",
     "@types/node": "^22.7.0",
     "@types/react": "^18.3.11",
     "tsup": "^8.3.0",
