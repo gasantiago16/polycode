@@ -6,6 +6,7 @@ import {
   PermissionEngine,
   type PermissionMode,
   type Provider,
+  type Sandbox,
   type ToolSpec,
 } from "@polycode/core";
 import { configured, backendName } from "@polycode/secrets";
@@ -19,7 +20,7 @@ interface Line {
 export interface AppProps {
   provider: Provider;
   tools: ToolSpec[];
-  cwd: string;
+  sandbox: Sandbox;
   system?: string;
   /** Supplied by the CLI so `/model openai:gpt-5` can rebuild a Provider. */
   onModelSwitch?: (arg: string) => Provider;
@@ -40,7 +41,7 @@ interface PendingPerm {
 export function App({
   provider,
   tools,
-  cwd,
+  sandbox,
   system,
   onModelSwitch,
   onLogin,
@@ -77,7 +78,7 @@ export function App({
   );
 
   const engineRef = useRef(new PermissionEngine("ask", promptPermission));
-  const agentRef = useRef(new Agent(provider, tools, engineRef.current, { system, cwd }));
+  const agentRef = useRef(new Agent(provider, tools, engineRef.current, { system, sandbox }));
 
   // Answer a pending permission prompt with y/n.
   useInput(

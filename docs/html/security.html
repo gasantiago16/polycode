@@ -111,16 +111,36 @@ so the AI SDK provider factory — which reads env — can see them.</p>
 </tbody></table>
 <p>Use <code>yolo</code> only in sandboxes / CI.</p>
 <h2>Tool path safety</h2>
-<p>File tools resolve paths against the working directory and reject paths that escape the
-project root (<code>..</code> traversal). <code>bash</code> is classified <code>dangerous</code> and gated accordingly.</p>
-<h2>Hosted-mode caveats (before exposing the server)</h2>
-<p>The scaffold server runs tools in <code>yolo</code> mode in its own working directory. <strong>Before any
-real deployment:</strong></p>
+<p>Tools never touch Node&#39;s <code>fs</code>/<code>child_process</code> directly — all I/O goes through a <code>Sandbox</code>
+(in <code>@polycode/core</code>). File ops are path-jailed to the project root (<code>..</code> traversal is
+rejected). <code>bash</code> is classified <code>dangerous</code> and gated by the permission mode.</p>
+<h2>Tool-execution sandbox</h2>
+<p>The <code>Sandbox</code> has two backends (<code>@polycode/sandbox</code>):</p>
 <ul>
-<li>Add authentication and per-request/per-session permission policy.</li>
-<li>Run tool execution inside a <strong>sandbox</strong> (container / Vercel Sandbox / microVM), not the
-host filesystem.</li>
-<li>Apply rate limiting and audit logging.</li>
+<li><strong><code>local</code></strong> (default) — host filesystem + host shell, path-jailed. Fine for local,
+trusted use.</li>
+<li><strong><code>docker</code></strong> — <strong>shell commands run inside an isolated container</strong>; file ops operate on
+the bind-mounted project, so edits still land in your real files. The container is
+locked down: <code>--network none</code> (no egress), <code>--cap-drop ALL</code>, <code>--security-opt no-new-privileges</code>, plus <code>--pids-limit</code> and <code>--memory</code> caps. The container is removed on
+exit.</li>
+</ul>
+<p>Select it:</p>
+<pre><code class="language-powershell">corepack pnpm dev -- --sandbox docker          # or set &quot;sandbox&quot;: { &quot;kind&quot;: &quot;docker&quot; } in config
+</code></pre>
+<p>If Docker isn&#39;t available, the CLI <strong>prints a warning and falls back to <code>local</code></strong> so the
+app still runs. Config knobs: <code>image</code> (default <code>node:22-alpine</code>), <code>network</code> (default
+<code>false</code>), <code>memory</code> (default <code>1g</code>).</p>
+<p><strong>Design note:</strong> the sandbox isolates the <em>execution</em> surface (arbitrary shell), which is
+the real risk. It does <strong>not</strong> isolate file edits from the project — that&#39;s intentional, so
+the agent&#39;s changes apply where you want them. For fully untrusted use where edits must be
+quarantined too, run on a disposable copy of the repo.</p>
+<h2>Hosted-mode caveats (before exposing the server)</h2>
+<p>The scaffold server runs tools in <code>yolo</code> mode, contained by the sandbox you pass it (use a
+<code>docker</code> sandbox there). <strong>Still required before real deployment:</strong></p>
+<ul>
+<li>Per-request authentication and per-session permission policy.</li>
+<li>A <code>docker</code> (or stronger) sandbox — don&#39;t expose a <code>local</code> sandbox to untrusted input.</li>
+<li>Rate limiting and audit logging.</li>
 </ul>
 <p>These are tracked in <a href="continuity.html">Continuity / Handoff</a>.</p>
 

@@ -50,6 +50,7 @@ provider, transport, or UI.</p>
      ├─ providers ── core
      ├─ router ──── providers, core
      ├─ tools ───── core
+     ├─ sandbox ─── core
      ├─ secrets
      └─ server ──── router, tools, core
 </code></pre>
@@ -114,6 +115,11 @@ per-provider <code>Capabilities</code>. Deps: <code>ai</code>, <code>@ai-sdk/ope
 <td>simple <code>*</code>/<code>**</code> file matching</td>
 </tr>
 </tbody></table>
+<h2><code>@polycode/sandbox</code></h2>
+<p>Tool-execution backends implementing core&#39;s <code>Sandbox</code>: <code>LocalSandbox</code> (host shell,
+path-jailed) and <code>DockerSandbox</code> (shell in a locked-down container, file ops on the
+bind-mount). <code>createSandbox({ kind, root, ... })</code>. See <a href="security.html">Security &amp; Keys</a>.
+<code>ToolContext</code> carries a <code>Sandbox</code>, so tools do no direct <code>fs</code>/<code>child_process</code>.</p>
 <h2><code>@polycode/secrets</code></h2>
 <p>Secure key store: <code>getKey</code> / <code>setKey</code> / <code>deleteKey</code> / <code>configured</code> / <code>hydrateEnv</code> /
 <code>backendName</code> / <code>storeLocation</code>. Optional dep <code>@napi-rs/keyring</code> (keychain); <code>0600</code> file

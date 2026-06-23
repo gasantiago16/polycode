@@ -60,7 +60,9 @@ with heuristic fallback; per-turn auto-routing in the TUI (<code>/route</code>).
 <li>✅ Ink TUI: streaming render, permission prompt, slash commands.</li>
 <li>✅ <strong>Secure key flow</strong>: masked first-run setup → OS keychain (DPAPI-backed on Windows),
 <code>0600</code> file fallback. Keychain backend <strong>verified active</strong>.</li>
-<li>✅ Hosted server: <code>POST /chat</code> (SSE) + <code>/health</code>.</li>
+<li>✅ Tool-execution sandbox: <code>local</code> (host) + <code>docker</code> (isolated shell) backends; tools
+run only through the <code>Sandbox</code> contract; <code>--sandbox docker</code> with graceful fallback.</li>
+<li>✅ Hosted server: <code>POST /chat</code> (SSE) + <code>/health</code> (takes a <code>Sandbox</code>).</li>
 <li>✅ Live smoke harness (<code>pnpm smoke &lt;provider:model&gt;</code>).</li>
 <li>✅ Docs in Markdown + generated HTML (<code>docs/</code>, <code>docs/html/</code>).</li>
 <li>⏳ <strong>Live end-to-end provider call not yet run</strong> — needs a real key pasted via the setup
@@ -100,9 +102,10 @@ publishing, switch to <code>dist</code> and run <code>build</code>.</li>
 <h2>Next steps (suggested order)</h2>
 <ol>
 <li><strong>Run the live smoke test</strong> — paste a key via the setup screen, then
-<code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>. Also <code>route-check</code> the classifier.</li>
-<li><strong>Tool-execution sandbox</strong> for hosted mode (container / microVM) + auth + per-session
-permission policy before exposing the server.</li>
+<code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>. Also <code>route-check</code> the classifier,
+and try <code>--sandbox docker</code> once Docker is available.</li>
+<li><strong>Harden hosted mode</strong> — per-request auth + per-session permission policy on top of the
+docker sandbox; rate limiting + audit logging before exposing the server.</li>
 <li><strong>Build &amp; distribute</strong> — wire <code>tsup</code>, flip package <code>exports</code> to <code>dist</code>, publish <code>@polycode/cli</code>
 (or ship a single binary), add a Docker image for the server.</li>
 <li><strong>Parallel-safe tool batching</strong> — run <code>parallelSafe</code> tools concurrently in the loop.</li>

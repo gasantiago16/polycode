@@ -2,6 +2,7 @@ import type {
   Provider,
   ToolSpec,
   ToolContext,
+  Sandbox,
   CanonicalMessage,
   CanonicalEvent,
   ContentPart,
@@ -21,7 +22,7 @@ export type AgentUIEvent =
 
 export interface AgentOptions {
   system?: string;
-  cwd: string;
+  sandbox: Sandbox;
 }
 
 /**
@@ -110,7 +111,7 @@ export class Agent {
 
       // Permission-gate + execute. Sequential for now so permission prompts
       // never overlap; parallelSafe tools can later be batched with Promise.all.
-      const ctx: ToolContext = { cwd: this.opts.cwd, signal };
+      const ctx: ToolContext = { sandbox: this.opts.sandbox, signal };
       const results: ToolResultPart[] = [];
 
       for (const call of pending) {

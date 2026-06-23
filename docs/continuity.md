@@ -20,7 +20,9 @@ provider-blind agent engine.
 - ✅ Ink TUI: streaming render, permission prompt, slash commands.
 - ✅ **Secure key flow**: masked first-run setup → OS keychain (DPAPI-backed on Windows),
   `0600` file fallback. Keychain backend **verified active**.
-- ✅ Hosted server: `POST /chat` (SSE) + `/health`.
+- ✅ Tool-execution sandbox: `local` (host) + `docker` (isolated shell) backends; tools
+  run only through the `Sandbox` contract; `--sandbox docker` with graceful fallback.
+- ✅ Hosted server: `POST /chat` (SSE) + `/health` (takes a `Sandbox`).
 - ✅ Live smoke harness (`pnpm smoke <provider:model>`).
 - ✅ Docs in Markdown + generated HTML (`docs/`, `docs/html/`).
 - ⏳ **Live end-to-end provider call not yet run** — needs a real key pasted via the setup
@@ -60,9 +62,10 @@ provider-blind agent engine.
 ## Next steps (suggested order)
 
 1. **Run the live smoke test** — paste a key via the setup screen, then
-   `corepack pnpm smoke <provider:model>`; confirm `PASS`. Also `route-check` the classifier.
-2. **Tool-execution sandbox** for hosted mode (container / microVM) + auth + per-session
-   permission policy before exposing the server.
+   `corepack pnpm smoke <provider:model>`; confirm `PASS`. Also `route-check` the classifier,
+   and try `--sandbox docker` once Docker is available.
+2. **Harden hosted mode** — per-request auth + per-session permission policy on top of the
+   docker sandbox; rate limiting + audit logging before exposing the server.
 3. **Build & distribute** — wire `tsup`, flip package `exports` to `dist`, publish `@polycode/cli`
    (or ship a single binary), add a Docker image for the server.
 4. **Parallel-safe tool batching** — run `parallelSafe` tools concurrently in the loop.

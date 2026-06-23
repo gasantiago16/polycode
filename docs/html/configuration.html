@@ -139,6 +139,14 @@ per-turn auto-routing with <code>/route auto|off|status</code> (auto-routing is 
 <td>Force a starting tier.</td>
 </tr>
 <tr>
+<td><code>--routing &lt;heuristic|model&gt;</code></td>
+<td>Override the routing strategy.</td>
+</tr>
+<tr>
+<td><code>--sandbox &lt;local|docker&gt;</code></td>
+<td>Override the tool-execution sandbox.</td>
+</tr>
+<tr>
 <td><code>--serve</code></td>
 <td>Run the HTTP+SSE server instead of the TUI.</td>
 </tr>
@@ -147,6 +155,15 @@ per-turn auto-routing with <code>/route auto|off|status</code> (auto-routing is 
 <td>Server port (default 8787).</td>
 </tr>
 </tbody></table>
+<h2>Sandbox</h2>
+<p><code>sandbox</code> selects where tools execute (see <a href="security.html">Security &amp; Keys</a>):</p>
+<pre><code class="language-json">&quot;sandbox&quot;: { &quot;kind&quot;: &quot;docker&quot;, &quot;image&quot;: &quot;node:22-alpine&quot;, &quot;network&quot;: false, &quot;memory&quot;: &quot;1g&quot; }
+</code></pre>
+<ul>
+<li><code>kind</code>: <code>local</code> (host shell, default) or <code>docker</code> (shell in an isolated container).</li>
+<li><code>image</code> / <code>network</code> / <code>memory</code>: docker-only knobs. Override <code>kind</code> at launch with
+<code>--sandbox docker</code>. Falls back to <code>local</code> (with a warning) if Docker is unavailable.</li>
+</ul>
 <h2>Environment variables</h2>
 <table>
 <thead>

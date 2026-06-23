@@ -3,7 +3,7 @@ import { Text } from "ink";
 import { App } from "./app.js";
 import { Setup } from "./setup.js";
 import { configured, hydrateEnv } from "@polycode/secrets";
-import type { Provider, ToolSpec } from "@polycode/core";
+import type { Provider, Sandbox, ToolSpec } from "@polycode/core";
 
 export interface Spec {
   provider: string;
@@ -14,7 +14,7 @@ export interface RootProps {
   tiers: { cheap: Spec; strong: Spec; long: Spec };
   forced?: Spec;
   tools: ToolSpec[];
-  cwd: string;
+  sandbox: Sandbox;
   system?: string;
   /** Build a Provider for an initial tier spec. */
   buildProvider: (spec: Spec) => Provider;
@@ -59,7 +59,7 @@ export function Root(props: RootProps) {
     <App
       provider={provider}
       tools={props.tools}
-      cwd={props.cwd}
+      sandbox={props.sandbox}
       system={props.system}
       onModelSwitch={props.onModelSwitch}
       onLogin={() => setMode("setup")}

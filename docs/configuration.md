@@ -87,8 +87,22 @@ Env vars: `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `XAI_API_KEY`. See
 |---|---|
 | `--model <provider:model>` | Force a specific model for the session. |
 | `--tier <cheap\|strong\|long>` | Force a starting tier. |
+| `--routing <heuristic\|model>` | Override the routing strategy. |
+| `--sandbox <local\|docker>` | Override the tool-execution sandbox. |
 | `--serve` | Run the HTTP+SSE server instead of the TUI. |
 | `--port <n>` | Server port (default 8787). |
+
+## Sandbox
+
+`sandbox` selects where tools execute (see [Security & Keys](security.md)):
+
+```json
+"sandbox": { "kind": "docker", "image": "node:22-alpine", "network": false, "memory": "1g" }
+```
+
+- `kind`: `local` (host shell, default) or `docker` (shell in an isolated container).
+- `image` / `network` / `memory`: docker-only knobs. Override `kind` at launch with
+  `--sandbox docker`. Falls back to `local` (with a warning) if Docker is unavailable.
 
 ## Environment variables
 

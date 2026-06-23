@@ -57,8 +57,36 @@ export interface ToolRunResult {
   isError?: boolean;
 }
 
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  code: number;
+}
+
+export interface ExecOptions {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * The execution surface tools run against. A `local` backend uses the host
+ * filesystem + shell; a `docker` backend runs shell commands inside an isolated
+ * container (file ops stay on the bind-mounted project so edits land for real).
+ * Tools never touch Node's fs/child_process directly — only this.
+ */
+export interface Sandbox {
+  /** Human-readable label (project path, or "docker:<id> (path)"). */
+  readonly root: string;
+  readFile(relPath: string): Promise<string>;
+  writeFile(relPath: string, content: string): Promise<void>;
+  exec(command: string, opts?: ExecOptions): Promise<ExecResult>;
+  /** Yield project-relative file paths (ignoring node_modules/.git/etc.). */
+  walk(): AsyncIterable<string>;
+  dispose(): Promise<void>;
+}
+
 export interface ToolContext {
-  cwd: string;
+  sandbox: Sandbox;
   signal?: AbortSignal;
 }
 

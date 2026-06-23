@@ -1,23 +1,24 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { Agent, PermissionEngine } from "@polycode/core";
+import { Agent, PermissionEngine, type Sandbox } from "@polycode/core";
 import { Router, type RouterConfig } from "@polycode/router";
 import { tools } from "@polycode/tools";
 
 export interface ServerOptions {
   cfg: RouterConfig;
   port: number;
-  cwd: string;
+  /** Tool-execution sandbox (use a `docker` sandbox for untrusted hosted use). */
+  sandbox: Sandbox;
 }
 
 /**
  * Minimal hosted-mode surface: the SAME agent engine, exposed over HTTP+SSE.
  * POST /chat {"message": "..."} streams AgentUIEvent frames as Server-Sent Events.
  *
- * Scaffold caveat: this runs tools in "yolo" mode in the server's own cwd.
- * Before real deployment, gate per request (auth, per-session permission mode)
- * and run tool execution inside a sandbox (container / Vercel Sandbox / firecracker).
+ * Scaffold caveat: this runs tools in "yolo" mode. Tool execution is contained
+ * by the provided sandbox (pass a `docker` sandbox for untrusted use), but you
+ * still need per-request auth and per-session permission policy before exposing it.
  */
-export function startServer({ cfg, port, cwd }: ServerOptions): void {
+export function startServer({ cfg, port, sandbox }: ServerOptions): void {
   const router = new Router(cfg);
 
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -35,7 +36,7 @@ export function startServer({ cfg, port, cwd }: ServerOptions): void {
       sse(res, "meta", { tier, model: `${provider.id}:${provider.model}`, routing: router.strategy });
 
       const engine = new PermissionEngine("yolo", async () => true);
-      const agent = new Agent(provider, tools, engine, { system: cfg.system, cwd });
+      const agent = new Agent(provider, tools, engine, { system: cfg.system, sandbox });
       agent.pushUser(message);
 
       try {
@@ -60,6 +61,7 @@ export function startServer({ cfg, port, cwd }: ServerOptions): void {
 
   server.listen(port, () => {
     console.log(`polycode server → http://localhost:${port}  (POST /chat)`);
+    console.log(`  routing: ${router.strategy} · sandbox: ${sandbox.root}`);
   });
 }
 

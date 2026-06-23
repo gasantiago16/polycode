@@ -9,6 +9,7 @@
     "@polycode/core": "workspace:*",
     "@polycode/providers": "workspace:*",
     "@polycode/router": "workspace:*",
+    "@polycode/sandbox": "workspace:*",
     "@polycode/secrets": "workspace:*",
     "@polycode/server": "workspace:*",
     "@polycode/tools": "workspace:*",

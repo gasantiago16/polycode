@@ -21,6 +21,7 @@
 | `--model <provider:model>` | Force a specific model (e.g. `xai:grok-4.3`). |
 | `--tier <cheap\|strong\|long>` | Force a starting tier from your config. |
 | `--routing <heuristic\|model>` | Override the routing strategy (model = a cheap model picks the tier). |
+| `--sandbox <local\|docker>` | Tool-execution sandbox (docker isolates shell). |
 | `--serve` | Start the server instead of the TUI. |
 | `--port <n>` | Server port (default 8787). |
 

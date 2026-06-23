@@ -10,5 +10,12 @@
     "$comment": "strategy 'heuristic' (free) or 'model' (a cheap model picks the tier each turn). classifier defaults to the cheap tier.",
     "strategy": "heuristic",
     "classifier": { "provider": "google", "model": "gemini-2.5-flash" }
+  },
+  "sandbox": {
+    "$comment": "kind 'local' (host shell) or 'docker' (shell runs in an isolated container; file edits still land in the project). Use 'docker' for untrusted/hosted use.",
+    "kind": "local",
+    "image": "node:22-alpine",
+    "network": false,
+    "memory": "1g"
   }
 }

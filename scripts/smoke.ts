@@ -11,6 +11,7 @@
  */
 import { Agent, PermissionEngine } from "@polycode/core";
 import { makeProvider, parseModelArg } from "@polycode/providers";
+import { createSandbox } from "@polycode/sandbox";
 import { tools } from "@polycode/tools";
 import { hydrateEnv } from "@polycode/secrets";
 
@@ -35,10 +36,11 @@ async function main(): Promise<void> {
   console.log(`\n▶ provider: ${provider.id}:${provider.model}`);
   console.log(`  caps: ${JSON.stringify(provider.capabilities())}\n`);
 
+  const sandbox = await createSandbox({ kind: "local", root: process.cwd() });
   const engine = new PermissionEngine("yolo", async () => true);
   const agent = new Agent(provider, tools, engine, {
     system: "You are a terminal coding agent. Use the `read` tool to inspect files before answering.",
-    cwd: process.cwd(),
+    sandbox,
   });
 
   agent.pushUser(

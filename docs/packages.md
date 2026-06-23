@@ -9,6 +9,7 @@ cli ─┬─ tui ──┬─ core
      ├─ providers ── core
      ├─ router ──── providers, core
      ├─ tools ───── core
+     ├─ sandbox ─── core
      ├─ secrets
      └─ server ──── router, tools, core
 ```
@@ -46,6 +47,13 @@ The default tool registry (`tools`), each a `ToolSpec` with a permission class:
 | `bash` | dangerous | shell command with timeout |
 | `grep` | safe | regex over file contents |
 | `glob` | safe | simple `*`/`**` file matching |
+
+## `@polycode/sandbox`
+
+Tool-execution backends implementing core's `Sandbox`: `LocalSandbox` (host shell,
+path-jailed) and `DockerSandbox` (shell in a locked-down container, file ops on the
+bind-mount). `createSandbox({ kind, root, ... })`. See [Security & Keys](security.md).
+`ToolContext` carries a `Sandbox`, so tools do no direct `fs`/`child_process`.
 
 ## `@polycode/secrets`
 

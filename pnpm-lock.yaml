@@ -17,6 +17,9 @@ importers:
       '@polycode/router':
         specifier: workspace:*
         version: link:packages/router
+      '@polycode/sandbox':
+        specifier: workspace:*
+        version: link:packages/sandbox
       '@polycode/secrets':
         specifier: workspace:*
         version: link:packages/secrets
@@ -53,6 +56,9 @@ importers:
       '@polycode/router':
         specifier: workspace:*
         version: link:../router
+      '@polycode/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       '@polycode/secrets':
         specifier: workspace:*
         version: link:../secrets
@@ -94,6 +100,12 @@ importers:
       '@polycode/providers':
         specifier: workspace:*
         version: link:../providers
+
+  packages/sandbox:
+    dependencies:
+      '@polycode/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/secrets:
     optionalDependencies:
