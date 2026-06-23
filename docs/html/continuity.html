@@ -41,6 +41,7 @@
 <a href="cli.html">CLI Reference</a>
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
+<a href="roadmap.html">Roadmap</a>
 <a href="continuity.html" class="active">Continuity / Handoff</a></nav>
 <main>
 <h1>Continuity / Handoff</h1>
@@ -71,8 +72,11 @@ run only through the <code>Sandbox</code> contract; <code>--sandbox docker</code
 <li>✅ Build &amp; distribute: <code>tsup</code> bundles the CLI to a single <code>poly</code> bin (internal packages
 bundled, third-party external); publishable <code>@polycode/cli</code>; multi-stage server <code>Dockerfile</code>.</li>
 <li>✅ Docs in Markdown + generated HTML (<code>docs/</code>, <code>docs/html/</code>).</li>
-<li>⏳ <strong>Live end-to-end provider call not yet run</strong> — needs a real key pasted via the setup
-screen, then <code>pnpm smoke</code>.</li>
+<li>✅ <strong>Live end-to-end provider call verified</strong> (2026-06-23) — <code>pnpm smoke xai:grok-4.3</code>
+round-trip green (tool call → numbered result → text).</li>
+<li>✅ <strong>Phase 1 — Brains + Loop</strong> (2026-06-23) — project-context injection (<code>gatherContext</code>),
+loop hardening (<code>maxSteps</code> cap + transient-error retry), and a <code>cat -n</code> numbered <code>read</code> with
+<code>offset</code>/<code>limit</code>. See the <a href="roadmap.html">Claude-Code Parity Roadmap</a> for what&#39;s next.</li>
 </ul>
 <h2>Key decisions (and why)</h2>
 <ol>
@@ -106,6 +110,10 @@ publishing, switch to <code>dist</code> and run <code>build</code>.</li>
 <li>Commits: baseline scaffold → secure key setup + smoke harness → docs.</li>
 </ul>
 <h2>Next steps (suggested order)</h2>
+<blockquote>
+<p>The Claude-Code parity plan now lives in the <a href="roadmap.html">Roadmap</a>: Phase 1 (brains + loop)
+is done; Phases 2–4 (tools / TUI / persistence) are queued.</p>
+</blockquote>
 <ol>
 <li><strong>Run the live smoke test</strong> — paste a key via the setup screen, then
 <code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>. Also <code>route-check</code> the classifier,

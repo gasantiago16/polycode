@@ -9,19 +9,45 @@ function clamp(s: string): string {
 // Tools are thin: they validate intent and delegate all I/O to ctx.sandbox,
 // which is either host-local or an isolated container. See @polycode/sandbox.
 
+const DEFAULT_READ_LIMIT = 2000;
+
 const read: ToolSpec = {
   name: "read",
-  description: "Read a UTF-8 text file relative to the project root.",
+  description:
+    "Read a UTF-8 text file relative to the project root. Returns cat -n style numbered lines so you can reference and edit by line. Use offset/limit for large files.",
   permission: "safe",
   parallelSafe: true,
   parameters: {
     type: "object",
-    properties: { path: { type: "string", description: "File path relative to project root" } },
+    properties: {
+      path: { type: "string", description: "File path relative to project root" },
+      offset: { type: "number", description: "1-based line to start from (default 1)" },
+      limit: {
+        type: "number",
+        description: `Max lines to return (default ${DEFAULT_READ_LIMIT})`,
+      },
+    },
     required: ["path"],
     additionalProperties: false,
   },
-  async run(input: { path: string }, ctx: ToolContext) {
-    return { output: clamp(await ctx.sandbox.readFile(input.path)) };
+  async run(input: { path: string; offset?: number; limit?: number }, ctx: ToolContext) {
+    const raw = await ctx.sandbox.readFile(input.path);
+    const lines = raw.split("\n");
+    const total = lines.length;
+    const start = Math.max(1, Math.floor(input.offset ?? 1));
+    if (start > total) {
+      return { output: `(file has ${total} lines; offset ${start} is past end)`, isError: true };
+    }
+    const limit = Math.max(1, Math.floor(input.limit ?? DEFAULT_READ_LIMIT));
+    const end = Math.min(total, start - 1 + limit);
+    const width = String(end).length;
+    const body = lines
+      .slice(start - 1, end)
+      .map((line, i) => `${String(start + i).padStart(width)}\t${line}`)
+      .join("\n");
+    const header = `// ${input.path} (lines ${start}-${end} of ${total})\n`;
+    const more = end < total ? `\n…[${total - end} more lines; read with offset ${end + 1}]` : "";
+    return { output: clamp(header + body + more) };
   },
 };
 

@@ -30,8 +30,11 @@ provider-blind agent engine.
 - ✅ Build & distribute: `tsup` bundles the CLI to a single `poly` bin (internal packages
   bundled, third-party external); publishable `@polycode/cli`; multi-stage server `Dockerfile`.
 - ✅ Docs in Markdown + generated HTML (`docs/`, `docs/html/`).
-- ⏳ **Live end-to-end provider call not yet run** — needs a real key pasted via the setup
-  screen, then `pnpm smoke`.
+- ✅ **Live end-to-end provider call verified** (2026-06-23) — `pnpm smoke xai:grok-4.3`
+  round-trip green (tool call → numbered result → text).
+- ✅ **Phase 1 — Brains + Loop** (2026-06-23) — project-context injection (`gatherContext`),
+  loop hardening (`maxSteps` cap + transient-error retry), and a `cat -n` numbered `read` with
+  `offset`/`limit`. See the [Claude-Code Parity Roadmap](roadmap.md) for what's next.
 
 ## Key decisions (and why)
 
@@ -65,6 +68,9 @@ provider-blind agent engine.
 - Commits: baseline scaffold → secure key setup + smoke harness → docs.
 
 ## Next steps (suggested order)
+
+> The Claude-Code parity plan now lives in the [Roadmap](roadmap.md): Phase 1 (brains + loop)
+> is done; Phases 2–4 (tools / TUI / persistence) are queued.
 
 1. **Run the live smoke test** — paste a key via the setup screen, then
    `corepack pnpm smoke <provider:model>`; confirm `PASS`. Also `route-check` the classifier,

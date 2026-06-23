@@ -23,6 +23,10 @@ export type AgentUIEvent =
 export interface AgentOptions {
   system?: string;
   sandbox: Sandbox;
+  /** Hard cap on model turns per run() to stop runaway tool loops (default 50). */
+  maxSteps?: number;
+  /** Retries for transient provider errors that hit before any output (default 2). */
+  maxRetries?: number;
 }
 
 /**
@@ -61,45 +65,89 @@ export class Agent {
 
   async *run(signal?: AbortSignal): AsyncGenerator<AgentUIEvent> {
     const toolMap = new Map(this.tools.map((t) => [t.name, t]));
+    const maxSteps = this.opts.maxSteps ?? 50;
+    const maxRetries = this.opts.maxRetries ?? 2;
+    let steps = 0;
 
     while (true) {
+      if (steps++ >= maxSteps) {
+        yield {
+          type: "error",
+          error: `step limit reached (${maxSteps} model turns) — stopping to avoid a runaway loop`,
+        };
+        return;
+      }
+
       const assistantContent: ContentPart[] = [];
       const pending: ToolCallPart[] = [];
       let textBuf = "";
       let stop: StopReason = "end_turn";
       let usage: { inputTokens: number; outputTokens: number } | undefined;
+      let fatal = false;
 
-      for await (const ev of this.provider.stream({
-        system: this.opts.system,
-        messages: this.messages,
-        tools: this.tools,
-        signal,
-      })) {
-        switch (ev.type) {
-          case "text_delta":
-            textBuf += ev.text;
-            yield ev;
-            break;
-          case "reasoning_delta":
-            // Reasoning is surfaced to the UI but not replayed into history,
-            // since reasoning blocks are not portable across providers.
-            yield ev;
-            break;
-          case "tool_call":
-            pending.push(ev.call);
-            assistantContent.push(ev.call);
-            yield ev;
-            break;
-          case "stop":
-            stop = ev.reason;
-            usage = ev.usage;
-            yield ev;
-            break;
-          case "error":
-            yield ev;
-            return;
+      // One model turn. Retry transient provider errors (rate limits, dropped
+      // connections) that hit BEFORE we've emitted anything this turn; once text
+      // or tool calls have streamed we can't cleanly replay, so we surface it.
+      for (let attempt = 0; ; attempt++) {
+        let produced = false;
+        let errored: string | undefined;
+
+        try {
+          for await (const ev of this.provider.stream({
+            system: this.opts.system,
+            messages: this.messages,
+            tools: this.tools,
+            signal,
+          })) {
+            switch (ev.type) {
+              case "text_delta":
+                textBuf += ev.text;
+                produced = true;
+                yield ev;
+                break;
+              case "reasoning_delta":
+                // Surfaced to the UI but not replayed into history — reasoning
+                // blocks are not portable across providers.
+                produced = true;
+                yield ev;
+                break;
+              case "tool_call":
+                pending.push(ev.call);
+                assistantContent.push(ev.call);
+                produced = true;
+                yield ev;
+                break;
+              case "stop":
+                stop = ev.reason;
+                usage = ev.usage;
+                yield ev;
+                break;
+              case "error":
+                errored = ev.error;
+                break;
+            }
+          }
+        } catch (e) {
+          if (signal?.aborted) throw e; // user interrupt — let it propagate
+          errored = String(e);
         }
+
+        if (!errored) break; // turn finished cleanly
+
+        if (!produced && attempt < maxRetries && isTransient(errored)) {
+          await delay(backoffMs(attempt));
+          textBuf = "";
+          assistantContent.length = 0;
+          pending.length = 0;
+          continue; // re-stream the same turn
+        }
+
+        yield { type: "error", error: errored };
+        fatal = true;
+        break;
       }
+
+      if (fatal) return;
 
       if (textBuf) assistantContent.unshift({ type: "text", text: textBuf });
       this.messages.push({ role: "assistant", content: assistantContent });
@@ -155,4 +203,20 @@ export class Agent {
 
 function errorResult(call: ToolCallPart, output: string): ToolResultPart {
   return { type: "tool_result", id: call.id, name: call.name, output, isError: true };
+}
+
+/** Heuristic: is this provider error worth retrying (vs. a hard 4xx/bad request)? */
+function isTransient(msg: string): boolean {
+  return /\b(429|500|502|503|504)\b|rate.?limit|timeout|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed|network|socket hang ?up|overloaded|temporarily|unavailable/i.test(
+    msg,
+  );
+}
+
+/** Exponential backoff with jitter: ~0.5s, 1s, 2s, … */
+function backoffMs(attempt: number): number {
+  return 500 * 2 ** attempt + Math.floor(Math.random() * 250);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

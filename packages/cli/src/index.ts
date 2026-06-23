@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { GenerateRequest } from "@polycode/core";
+import { gatherContext, type GenerateRequest } from "@polycode/core";
 import { makeProvider, parseModelArg, type ProviderSpec } from "@polycode/providers";
 import { Router, type RouterConfig, type RoutingStrategy, type Tier } from "@polycode/router";
 import { createSandbox, type SandboxConfig, type SandboxKind } from "@polycode/sandbox";
@@ -68,6 +68,16 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Enrich the system prompt with live project context (cwd, git, file tree,
+  // CLAUDE.md/AGENTS.md) so the agent starts grounded instead of blind.
+  let system = cfg.system ?? "";
+  try {
+    const projectContext = await gatherContext({ cwd, sandbox });
+    if (projectContext) system = system ? `${system}\n\n${projectContext}` : projectContext;
+  } catch {
+    /* fall back to the base system prompt */
+  }
+
   // Optional forced starting model: --model wins, else --tier, else Root auto-picks.
   const forced: Spec | undefined = values.model
     ? parseModelArg(values.model)
@@ -88,7 +98,7 @@ async function main(): Promise<void> {
     tools,
     sandbox,
     cwd,
-    system: cfg.system,
+    system,
     buildProvider: (spec) => makeProvider(spec as ProviderSpec),
     onModelSwitch: (arg) => makeProvider(parseModelArg(arg)),
     route,

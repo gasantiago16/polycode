@@ -25,6 +25,7 @@ const ORDER: Array<[string, string]> = [
   ["cli.md", "CLI Reference"],
   ["packages.md", "Packages"],
   ["deploy.md", "Build & Deploy"],
+  ["roadmap.md", "Roadmap"],
   ["continuity.md", "Continuity / Handoff"],
 ];
 
