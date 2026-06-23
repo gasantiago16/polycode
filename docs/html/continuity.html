@@ -40,6 +40,7 @@
 <a href="security.html">Security & Keys</a>
 <a href="cli.html">CLI Reference</a>
 <a href="packages.html">Packages</a>
+<a href="deploy.html">Build & Deploy</a>
 <a href="continuity.html" class="active">Continuity / Handoff</a></nav>
 <main>
 <h1>Continuity / Handoff</h1>
@@ -67,6 +68,8 @@ with a test call · agentic hook (stub; MCP flow TODO).</li>
 run only through the <code>Sandbox</code> contract; <code>--sandbox docker</code> with graceful fallback.</li>
 <li>✅ Hosted server: <code>POST /chat</code> (SSE) + <code>/health</code> (takes a <code>Sandbox</code>).</li>
 <li>✅ Live smoke harness (<code>pnpm smoke &lt;provider:model&gt;</code>).</li>
+<li>✅ Build &amp; distribute: <code>tsup</code> bundles the CLI to a single <code>poly</code> bin (internal packages
+bundled, third-party external); publishable <code>@polycode/cli</code>; multi-stage server <code>Dockerfile</code>.</li>
 <li>✅ Docs in Markdown + generated HTML (<code>docs/</code>, <code>docs/html/</code>).</li>
 <li>⏳ <strong>Live end-to-end provider call not yet run</strong> — needs a real key pasted via the setup
 screen, then <code>pnpm smoke</code>.</li>
@@ -108,9 +111,8 @@ publishing, switch to <code>dist</code> and run <code>build</code>.</li>
 <code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>. Also <code>route-check</code> the classifier,
 and try <code>--sandbox docker</code> once Docker is available.</li>
 <li><strong>Harden hosted mode</strong> — per-request auth + per-session permission policy on top of the
-docker sandbox; rate limiting + audit logging before exposing the server.</li>
-<li><strong>Build &amp; distribute</strong> — wire <code>tsup</code>, flip package <code>exports</code> to <code>dist</code>, publish <code>@polycode/cli</code>
-(or ship a single binary), add a Docker image for the server.</li>
+docker sandbox; rate limiting + audit logging before exposing the server. Build/push the
+Docker image (the <code>Dockerfile</code> exists but hasn&#39;t been image-built from CI yet).</li>
 <li><strong>Parallel-safe tool batching</strong> — run <code>parallelSafe</code> tools concurrently in the loop.</li>
 <li><strong>Tune the classifier</strong> — few-shot examples / structured output; cache across sessions.</li>
 <li><strong>Wire agentic key provisioning</strong> — the Settings <code>a</code> hook is a stub; connect a real MCP/tool flow.</li>

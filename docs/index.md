@@ -18,6 +18,7 @@ server mode.
 - [Security & Keys](security.md) — secure key store, permission modes, sandboxing
 - [CLI Reference](cli.md) — flags and slash commands
 - [Packages](packages.md) — per-package reference
+- [Build & Deploy](deploy.md) — bundle, publish, Docker server image
 - [Continuity / Handoff](continuity.md) — current state, decisions, gotchas, next steps
 
 ## One-paragraph summary

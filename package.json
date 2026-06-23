@@ -11,7 +11,7 @@
     "route-check": "tsx scripts/route-check.ts",
     "typecheck": "tsc --noEmit",
     "docs": "tsx scripts/build-docs.ts",
-    "build": "tsup"
+    "build": "tsup --config packages/cli/tsup.config.ts"
   },
   "devDependencies": {
     "@polycode/core": "workspace:*",

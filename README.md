@@ -92,6 +92,9 @@ for a model-driven classifier later.
 
 ## Deploy
 
-- **Local CLI**: `pnpm build` → publish `@polycode/cli` to npm → `npx`/global install (native, like Claude Code).
-- **Hosted service**: containerize the `server` package (`pnpm serve`); add auth + a sandbox for tool execution.
-- **Tool sandbox**: for untrusted use, run `bash`/`write`/`edit` inside a container rather than the host cwd.
+See [docs/deploy.md](docs/deploy.md) for the full guide.
+
+- **Bundle**: `corepack pnpm build` → single `packages/cli/dist/index.js` (`poly` bin) via tsup.
+- **Local CLI**: run the bundle, or `pnpm -C packages/cli link --global` → `poly`.
+- **Publish** (manual): `cd packages/cli && npm publish` — internal packages are bundled, so consumers install only third-party deps.
+- **Hosted service**: `docker build -t polycode-server .` then `docker run -p 8787:8787 -e OPENAI_API_KEY=... polycode-server`.

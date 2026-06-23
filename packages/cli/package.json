@@ -1,11 +1,30 @@
 {
   "name": "@polycode/cli",
   "version": "0.0.0",
-  "private": true,
+  "description": "polycode — a multi-model terminal coding agent (OpenAI, Gemini, xAI).",
   "type": "module",
   "bin": { "poly": "./dist/index.js" },
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
+  "files": ["dist"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "tsup"
+  },
   "dependencies": {
+    "@ai-sdk/google": "^2.0.0",
+    "@ai-sdk/openai": "^2.0.0",
+    "@ai-sdk/xai": "^2.0.0",
+    "ai": "^5.0.0",
+    "ink": "^5.1.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^1.1.0"
+  },
+  "devDependencies": {
     "@polycode/core": "workspace:*",
     "@polycode/providers": "workspace:*",
     "@polycode/router": "workspace:*",
@@ -13,6 +32,8 @@
     "@polycode/secrets": "workspace:*",
     "@polycode/server": "workspace:*",
     "@polycode/tools": "workspace:*",
-    "@polycode/tui": "workspace:*"
+    "@polycode/tui": "workspace:*",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.3"
   }
 }

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build & Deploy · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="deploy.html" class="active">Build & Deploy</a>
+<a href="continuity.html">Continuity / Handoff</a></nav>
+<main>
+<h1>Build &amp; Deploy</h1>
+<h2>Build the CLI bundle</h2>
+<p><code>tsup</code> bundles the CLI into a single self-contained ESM file at
+<code>packages/cli/dist/index.js</code> (with a <code>#!/usr/bin/env node</code> shebang). Internal
+<code>@polycode/*</code> packages are bundled in; third-party deps (ai, ink, react, …) stay external
+and ship as the published package&#39;s <code>dependencies</code>.</p>
+<pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; build
+# → packages/cli/dist/index.js
+</code></pre>
+<h2>Run / install locally</h2>
+<pre><code class="language-powershell">node packages/cli/dist/index.js            # run the bundle directly (TUI)
+node packages/cli/dist/index.js --serve    # server mode
+
+# or link the `poly` bin globally from the cli package:
+corepack pnpm -C packages/cli link --global
+poly                                        # then just run `poly`
+</code></pre>
+<h2>Publish (manual — your step)</h2>
+<p><code>@polycode/cli</code> is configured to publish (<code>bin: poly</code>, <code>files: [&quot;dist&quot;]</code>,
+<code>prepublishOnly</code> builds). Publishing is an outward action under your own npm account/scope:</p>
+<pre><code class="language-powershell">cd packages/cli
+npm version &lt;patch|minor|major&gt;
+npm publish --access public      # choose your scope/visibility
+</code></pre>
+<p>Internal <code>@polycode/*</code> packages are <code>private</code> and stay unpublished — they&#39;re bundled into
+the CLI, so consumers only install the third-party runtime deps.</p>
+<h2>Server Docker image</h2>
+<p>The repo root has a multi-stage <code>Dockerfile</code> that builds the bundle and runs it in <code>--serve</code>
+mode.</p>
+<pre><code class="language-powershell">docker build -t polycode-server .
+docker run --rm -p 8787:8787 -e OPENAI_API_KEY=sk-... polycode-server
+# POST http://localhost:8787/chat  {&quot;message&quot;:&quot;...&quot;}   (SSE)
+# GET  http://localhost:8787/health
+</code></pre>
+<p>Pass provider keys via env (<code>OPENAI_API_KEY</code> / <code>GOOGLE_GENERATIVE_AI_API_KEY</code> /
+<code>XAI_API_KEY</code>). Routing strategy + sandbox come from <code>polycode.config.json</code> (bake it into the
+image or mount it).</p>
+<blockquote>
+<p><strong>Isolation note:</strong> inside the container, tools use the default <code>local</code> sandbox — the
+container itself is the boundary. For untrusted multi-tenant use, front the server with an
+orchestrator that spawns one container per session, and add auth + rate limiting (see
+<a href="security.html">Security &amp; Keys</a> and <a href="continuity.html">Continuity</a>).</p>
+</blockquote>
+<blockquote>
+<p><strong>Not built in CI yet</strong> — the Dockerfile is provided but hasn&#39;t been image-built/pushed
+from this repo; verify <code>docker build</code> in your environment before relying on it.</p>
+</blockquote>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

@@ -27,6 +27,8 @@ provider-blind agent engine.
   run only through the `Sandbox` contract; `--sandbox docker` with graceful fallback.
 - ✅ Hosted server: `POST /chat` (SSE) + `/health` (takes a `Sandbox`).
 - ✅ Live smoke harness (`pnpm smoke <provider:model>`).
+- ✅ Build & distribute: `tsup` bundles the CLI to a single `poly` bin (internal packages
+  bundled, third-party external); publishable `@polycode/cli`; multi-stage server `Dockerfile`.
 - ✅ Docs in Markdown + generated HTML (`docs/`, `docs/html/`).
 - ⏳ **Live end-to-end provider call not yet run** — needs a real key pasted via the setup
   screen, then `pnpm smoke`.
@@ -68,12 +70,11 @@ provider-blind agent engine.
    `corepack pnpm smoke <provider:model>`; confirm `PASS`. Also `route-check` the classifier,
    and try `--sandbox docker` once Docker is available.
 2. **Harden hosted mode** — per-request auth + per-session permission policy on top of the
-   docker sandbox; rate limiting + audit logging before exposing the server.
-3. **Build & distribute** — wire `tsup`, flip package `exports` to `dist`, publish `@polycode/cli`
-   (or ship a single binary), add a Docker image for the server.
-4. **Parallel-safe tool batching** — run `parallelSafe` tools concurrently in the loop.
-5. **Tune the classifier** — few-shot examples / structured output; cache across sessions.
-6. **Wire agentic key provisioning** — the Settings `a` hook is a stub; connect a real MCP/tool flow.
+   docker sandbox; rate limiting + audit logging before exposing the server. Build/push the
+   Docker image (the `Dockerfile` exists but hasn't been image-built from CI yet).
+3. **Parallel-safe tool batching** — run `parallelSafe` tools concurrently in the loop.
+4. **Tune the classifier** — few-shot examples / structured output; cache across sessions.
+5. **Wire agentic key provisioning** — the Settings `a` hook is a stub; connect a real MCP/tool flow.
 
 ## Quick command reference
 
