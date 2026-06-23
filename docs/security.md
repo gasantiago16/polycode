@@ -28,7 +28,7 @@ so the AI SDK provider factory — which reads env — can see them.
 ## What is never done with keys
 
 - **Never echoed** — the setup screen masks input (`•`).
-- **Never logged** — keys are not printed; `/keys` shows provider names only, never values.
+- **Never logged** — keys are not printed; Settings shows only each provider's status/source, never the value.
 - **Never committed** — keys live in the keychain or the user config dir, not the repo.
   `.env` is git-ignored.
 - **Never sent anywhere** except the chosen provider's own API.

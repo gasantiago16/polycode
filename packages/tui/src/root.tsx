@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Text } from "ink";
 import { App } from "./app.js";
-import { Setup } from "./setup.js";
-import { configured, hydrateEnv } from "@polycode/secrets";
+import { Settings } from "./settings.js";
+import { configured, hydrateEnv, type ProviderId } from "@polycode/secrets";
 import type { Provider, Sandbox, ToolSpec } from "@polycode/core";
 
 export interface Spec {
@@ -15,24 +15,27 @@ export interface RootProps {
   forced?: Spec;
   tools: ToolSpec[];
   sandbox: Sandbox;
+  cwd: string;
   system?: string;
-  /** Build a Provider for an initial tier spec. */
   buildProvider: (spec: Spec) => Provider;
-  /** Build a Provider from a "provider:model" arg (for /model). */
   onModelSwitch: (arg: string) => Provider;
-  /** Classify a turn → tier Provider (smart routing). */
   route?: (text: string) => Promise<{ provider: Provider; tier: string; label: string }>;
-  /** Start with per-turn auto-routing enabled. */
   autoRoute?: boolean;
+  /** Validate a provider's stored key with a tiny request. */
+  validate?: (p: ProviderId) => Promise<boolean>;
+  /** Agentic key-provisioning hook (MCP/tool). */
+  onAgentic?: (p: ProviderId) => Promise<string> | string;
 }
 
-/** Orchestrates first-run setup vs. the main app. */
+/** Orchestrates first-run / on-demand settings vs. the main app. */
 export function Root(props: RootProps) {
-  const [mode, setMode] = useState<"setup" | "app">(configured().length ? "app" : "setup");
+  const [mode, setMode] = useState<"settings" | "app">(configured().length ? "app" : "settings");
 
-  if (mode === "setup") {
+  if (mode === "settings") {
     return (
-      <Setup
+      <Settings
+        validate={props.validate}
+        onAgentic={props.onAgentic}
         onDone={() => {
           hydrateEnv();
           setMode("app");
@@ -43,8 +46,16 @@ export function Root(props: RootProps) {
 
   const spec = pickSpec(props);
   if (!spec) {
-    // configured() came back empty (e.g. all keys removed) — go (back) to setup
-    return <Setup onDone={() => setMode("app")} />;
+    return (
+      <Settings
+        validate={props.validate}
+        onAgentic={props.onAgentic}
+        onDone={() => {
+          hydrateEnv();
+          setMode("app");
+        }}
+      />
+    );
   }
 
   hydrateEnv();
@@ -60,9 +71,10 @@ export function Root(props: RootProps) {
       provider={provider}
       tools={props.tools}
       sandbox={props.sandbox}
+      cwd={props.cwd}
       system={props.system}
       onModelSwitch={props.onModelSwitch}
-      onLogin={() => setMode("setup")}
+      onOpenSettings={() => setMode("settings")}
       route={props.route}
       autoRoute={props.autoRoute}
     />

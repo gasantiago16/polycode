@@ -2,10 +2,11 @@ import { parseArgs } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { GenerateRequest } from "@polycode/core";
 import { makeProvider, parseModelArg, type ProviderSpec } from "@polycode/providers";
 import { Router, type RouterConfig, type RoutingStrategy, type Tier } from "@polycode/router";
 import { createSandbox, type SandboxConfig, type SandboxKind } from "@polycode/sandbox";
-import { hydrateEnv } from "@polycode/secrets";
+import { hydrateEnv, getKey, ENV_VAR, type ProviderId } from "@polycode/secrets";
 import { tools } from "@polycode/tools";
 import { startTui, type Spec } from "@polycode/tui";
 
@@ -86,12 +87,51 @@ async function main(): Promise<void> {
     forced,
     tools,
     sandbox,
+    cwd,
     system: cfg.system,
     buildProvider: (spec) => makeProvider(spec as ProviderSpec),
     onModelSwitch: (arg) => makeProvider(parseModelArg(arg)),
     route,
     autoRoute: router.strategy === "model",
+    validate: (p) => validateKey(cfg, p),
+    onAgentic: (p) =>
+      `agentic provisioning for ${p} is not wired yet — coming soon (MCP/tool flow). Use paste / import-env / open-page for now.`,
   });
+}
+
+/** A small model id for the provider (prefers a configured tier). */
+function modelFor(cfg: AppConfig, p: ProviderId): string {
+  for (const t of [cfg.tiers.cheap, cfg.tiers.strong, cfg.tiers.long]) {
+    if (t.provider === p) return t.model;
+  }
+  const fallback: Record<ProviderId, string> = {
+    openai: "gpt-5.4-mini",
+    google: "gemini-2.5-flash",
+    xai: "grok-4.3",
+  };
+  return fallback[p];
+}
+
+/** Validate a provider's stored key with a tiny request. */
+async function validateKey(cfg: AppConfig, p: ProviderId): Promise<boolean> {
+  const key = getKey(p);
+  if (!key) return false;
+  process.env[ENV_VAR[p]] = key; // ensure the SDK sees the freshly-saved key
+  const provider = makeProvider({ provider: p, model: modelFor(cfg, p) });
+  const req: GenerateRequest = {
+    messages: [{ role: "user", content: [{ type: "text", text: "ping" }] }],
+    tools: [],
+    maxOutputTokens: 4,
+  };
+  try {
+    for await (const ev of provider.stream(req)) {
+      if (ev.type === "error") return false;
+      if (ev.type === "stop") return ev.reason !== "error";
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Build the tool-execution sandbox; fall back to local if docker is unavailable. */

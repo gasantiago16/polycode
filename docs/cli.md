@@ -32,8 +32,8 @@
 | `/model <provider:model>` | Switch model at runtime (history is preserved). |
 | `/mode <plan\|ask\|acceptEdits\|yolo>` | Change the tool-permission mode. |
 | `/route <auto\|off\|status>` | Toggle per-turn auto-routing (needs `--routing model` / config). |
-| `/login` | Re-open the masked key setup screen. |
-| `/keys` | Show configured providers + active backend (names only). |
+| `/settings` (or `/login`) | Open the API-key Settings screen (paste / import-env / open-page / validate / agentic). |
+| `/clear` | Clear the transcript. |
 | `/help` | List commands. |
 | `/exit` (or `/quit`) | Quit. |
 

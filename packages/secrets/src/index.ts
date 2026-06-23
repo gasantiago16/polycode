@@ -19,8 +19,19 @@ const LABELS: Record<ProviderId, string> = {
   xai: "xAI (Grok)",
 };
 
+const KEY_URLS: Record<ProviderId, string> = {
+  openai: "https://platform.openai.com/api-keys",
+  google: "https://aistudio.google.com/app/apikey",
+  xai: "https://console.x.ai/",
+};
+
 export function label(p: ProviderId): string {
   return LABELS[p];
+}
+
+/** Web page where a user creates an API key for a provider. */
+export function keyUrl(p: ProviderId): string {
+  return KEY_URLS[p];
 }
 
 const SERVICE = "polycode";
@@ -119,6 +130,38 @@ export function deleteKey(p: ProviderId): void {
 
 export function configured(): ProviderId[] {
   return PROVIDERS.filter((p) => !!getKey(p));
+}
+
+export type KeySource = "env" | "keychain" | "file" | "none";
+
+/** Where the active key for a provider is coming from (mirrors getKey order). */
+export function keySource(p: ProviderId): KeySource {
+  if (process.env[ENV_VAR[p]]) return "env";
+  if (KeyringEntry) {
+    try {
+      if (new KeyringEntry(SERVICE, p).getPassword()) return "keychain";
+    } catch {
+      /* fall through */
+    }
+  }
+  if (readFileStore()[p]) return "file";
+  return "none";
+}
+
+/**
+ * Persist any keys present in the environment into the secure store so they
+ * survive without the env var. Returns the providers imported.
+ */
+export function importFromEnv(): ProviderId[] {
+  const imported: ProviderId[] = [];
+  for (const p of PROVIDERS) {
+    const v = process.env[ENV_VAR[p]];
+    if (v) {
+      setKey(p, v);
+      imported.push(p);
+    }
+  }
+  return imported;
 }
 
 /**

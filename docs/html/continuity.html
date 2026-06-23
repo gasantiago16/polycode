@@ -57,7 +57,10 @@ provider-blind agent engine.</p>
 <li>✅ Smart routing: heuristic <strong>and</strong> model-driven classifiers (<code>--routing model</code>),
 with heuristic fallback; per-turn auto-routing in the TUI (<code>/route</code>).</li>
 <li>✅ Tools: read/write/edit/bash/grep/glob with permission classes.</li>
-<li>✅ Ink TUI: streaming render, permission prompt, slash commands.</li>
+<li>✅ Claude-Code-style Ink TUI: welcome banner, <code>⏺</code>/<code>⎿</code> tool rendering, markdown assistant
+output, bordered composer, spinner (elapsed + esc-to-interrupt), status bar.</li>
+<li>✅ Settings screen for keys: masked paste · import-from-env · open key page · validate
+with a test call · agentic hook (stub; MCP flow TODO).</li>
 <li>✅ <strong>Secure key flow</strong>: masked first-run setup → OS keychain (DPAPI-backed on Windows),
 <code>0600</code> file fallback. Keychain backend <strong>verified active</strong>.</li>
 <li>✅ Tool-execution sandbox: <code>local</code> (host) + <code>docker</code> (isolated shell) backends; tools
@@ -110,6 +113,7 @@ docker sandbox; rate limiting + audit logging before exposing the server.</li>
 (or ship a single binary), add a Docker image for the server.</li>
 <li><strong>Parallel-safe tool batching</strong> — run <code>parallelSafe</code> tools concurrently in the loop.</li>
 <li><strong>Tune the classifier</strong> — few-shot examples / structured output; cache across sessions.</li>
+<li><strong>Wire agentic key provisioning</strong> — the Settings <code>a</code> hook is a stub; connect a real MCP/tool flow.</li>
 </ol>
 <h2>Quick command reference</h2>
 <pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; install

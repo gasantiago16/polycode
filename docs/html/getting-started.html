@@ -59,17 +59,22 @@ everything through Corepack&#39;s passthrough and target the repo with <code>-C<
 <h2>Install</h2>
 <pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; install
 </code></pre>
-<h2>First run — secure key setup</h2>
-<p>Just launch the CLI. With no keys configured, it shows a <strong>masked</strong> setup screen:</p>
+<h2>First run — Settings (API keys)</h2>
+<p>Just launch the CLI. With no keys configured, it opens the <strong>Settings</strong> screen:</p>
 <pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; dev
 </code></pre>
+<p>In Settings (<code>↑↓</code> to select a provider):</p>
 <ul>
-<li>Paste an API key for any provider (input shows as <code>•••</code>), press <strong>Enter</strong>.</li>
-<li>Repeat for other providers, or press <strong>Esc</strong> to finish.</li>
-<li>Keys are stored in the <strong>OS keychain</strong> (Windows Credential Manager, DPAPI-backed) — never
-echoed, logged, or committed. See <a href="security.html">Security &amp; Keys</a>.</li>
+<li><strong>Enter</strong> — paste a key (masked <code>•••</code>).</li>
+<li><strong>i</strong> — import keys already in your environment / <code>.env</code> into the secure store.</li>
+<li><strong>o</strong> — open that provider&#39;s API-key page in your browser.</li>
+<li><strong>v</strong> — validate the saved key with a tiny test call (green <code>✓</code> / red <code>✗</code>).</li>
+<li><strong>a</strong> — agentic provisioning (MCP/tool — hook scaffolded, full flow coming).</li>
+<li><strong>Esc</strong> — done.</li>
 </ul>
-<p>Re-open the setup anytime with <code>/login</code>; check what&#39;s configured with <code>/keys</code>.</p>
+<p>Keys are stored in the <strong>OS keychain</strong> (Windows Credential Manager, DPAPI-backed) — never
+echoed, logged, or committed. See <a href="security.html">Security &amp; Keys</a>. Re-open anytime with
+<code>/settings</code>.</p>
 <blockquote>
 <p><strong>CI / power users:</strong> environment variables and a <code>.env</code> file still work and take
 precedence over the keychain. Copy <code>.env.example</code> to <code>.env</code> and fill in keys.</p>

@@ -63,9 +63,12 @@ fallback. See [Security & Keys](security.md).
 
 ## `@polycode/tui`
 
-Ink UI. `Root` orchestrates first-run setup vs. the app; `Setup` is the masked key prompt;
-`App` is the chat loop (streaming render, permission prompt, slash commands). Deps: `ink`,
-`ink-text-input`, `react`, `@polycode/core`, `@polycode/secrets`.
+Claude-Code-style Ink UI. `Root` orchestrates Settings vs. the app; `Settings` handles keys
+(masked paste · env import · open key page · validate · agentic hook); `App` is the chat loop
+(welcome `Banner`, `⏺`/`⎿` tool rendering, `Markdown` assistant output, bordered composer,
+spinner with elapsed + esc-to-interrupt, status bar, slash commands); `theme.ts` holds the
+accent/glyph palette. Deps: `ink`, `ink-text-input`, `ink-spinner`, `react`,
+`@polycode/core`, `@polycode/secrets`.
 
 ## `@polycode/server`
 

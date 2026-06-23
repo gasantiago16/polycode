@@ -17,7 +17,10 @@ provider-blind agent engine.
 - ✅ Smart routing: heuristic **and** model-driven classifiers (`--routing model`),
   with heuristic fallback; per-turn auto-routing in the TUI (`/route`).
 - ✅ Tools: read/write/edit/bash/grep/glob with permission classes.
-- ✅ Ink TUI: streaming render, permission prompt, slash commands.
+- ✅ Claude-Code-style Ink TUI: welcome banner, `⏺`/`⎿` tool rendering, markdown assistant
+  output, bordered composer, spinner (elapsed + esc-to-interrupt), status bar.
+- ✅ Settings screen for keys: masked paste · import-from-env · open key page · validate
+  with a test call · agentic hook (stub; MCP flow TODO).
 - ✅ **Secure key flow**: masked first-run setup → OS keychain (DPAPI-backed on Windows),
   `0600` file fallback. Keychain backend **verified active**.
 - ✅ Tool-execution sandbox: `local` (host) + `docker` (isolated shell) backends; tools
@@ -70,6 +73,7 @@ provider-blind agent engine.
    (or ship a single binary), add a Docker image for the server.
 4. **Parallel-safe tool batching** — run `parallelSafe` tools concurrently in the loop.
 5. **Tune the classifier** — few-shot examples / structured output; cache across sessions.
+6. **Wire agentic key provisioning** — the Settings `a` hook is a stub; connect a real MCP/tool flow.
 
 ## Quick command reference
 

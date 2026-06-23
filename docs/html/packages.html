@@ -125,9 +125,12 @@ bind-mount). <code>createSandbox({ kind, root, ... })</code>. See <a href="secur
 <code>backendName</code> / <code>storeLocation</code>. Optional dep <code>@napi-rs/keyring</code> (keychain); <code>0600</code> file
 fallback. See <a href="security.html">Security &amp; Keys</a>.</p>
 <h2><code>@polycode/tui</code></h2>
-<p>Ink UI. <code>Root</code> orchestrates first-run setup vs. the app; <code>Setup</code> is the masked key prompt;
-<code>App</code> is the chat loop (streaming render, permission prompt, slash commands). Deps: <code>ink</code>,
-<code>ink-text-input</code>, <code>react</code>, <code>@polycode/core</code>, <code>@polycode/secrets</code>.</p>
+<p>Claude-Code-style Ink UI. <code>Root</code> orchestrates Settings vs. the app; <code>Settings</code> handles keys
+(masked paste · env import · open key page · validate · agentic hook); <code>App</code> is the chat loop
+(welcome <code>Banner</code>, <code>⏺</code>/<code>⎿</code> tool rendering, <code>Markdown</code> assistant output, bordered composer,
+spinner with elapsed + esc-to-interrupt, status bar, slash commands); <code>theme.ts</code> holds the
+accent/glyph palette. Deps: <code>ink</code>, <code>ink-text-input</code>, <code>ink-spinner</code>, <code>react</code>,
+<code>@polycode/core</code>, <code>@polycode/secrets</code>.</p>
 <h2><code>@polycode/server</code></h2>
 <p><code>startServer()</code> — Node <code>http</code> server exposing the same engine over <code>POST /chat</code> (SSE) and
 <code>GET /health</code>. Deps: <code>@polycode/{core,router,tools}</code>.</p>

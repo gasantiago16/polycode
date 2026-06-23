@@ -21,20 +21,26 @@
 corepack pnpm -C "C:\Users\Gabriel Santiago\polycode" install
 ```
 
-## First run — secure key setup
+## First run — Settings (API keys)
 
-Just launch the CLI. With no keys configured, it shows a **masked** setup screen:
+Just launch the CLI. With no keys configured, it opens the **Settings** screen:
 
 ```powershell
 corepack pnpm -C "C:\Users\Gabriel Santiago\polycode" dev
 ```
 
-- Paste an API key for any provider (input shows as `•••`), press **Enter**.
-- Repeat for other providers, or press **Esc** to finish.
-- Keys are stored in the **OS keychain** (Windows Credential Manager, DPAPI-backed) — never
-  echoed, logged, or committed. See [Security & Keys](security.md).
+In Settings (`↑↓` to select a provider):
 
-Re-open the setup anytime with `/login`; check what's configured with `/keys`.
+- **Enter** — paste a key (masked `•••`).
+- **i** — import keys already in your environment / `.env` into the secure store.
+- **o** — open that provider's API-key page in your browser.
+- **v** — validate the saved key with a tiny test call (green `✓` / red `✗`).
+- **a** — agentic provisioning (MCP/tool — hook scaffolded, full flow coming).
+- **Esc** — done.
+
+Keys are stored in the **OS keychain** (Windows Credential Manager, DPAPI-backed) — never
+echoed, logged, or committed. See [Security & Keys](security.md). Re-open anytime with
+`/settings`.
 
 > **CI / power users:** environment variables and a `.env` file still work and take
 > precedence over the keychain. Copy `.env.example` to `.env` and fill in keys.
