@@ -20,6 +20,10 @@ export interface RootProps {
   buildProvider: (spec: Spec) => Provider;
   /** Build a Provider from a "provider:model" arg (for /model). */
   onModelSwitch: (arg: string) => Provider;
+  /** Classify a turn → tier Provider (smart routing). */
+  route?: (text: string) => Promise<{ provider: Provider; tier: string; label: string }>;
+  /** Start with per-turn auto-routing enabled. */
+  autoRoute?: boolean;
 }
 
 /** Orchestrates first-run setup vs. the main app. */
@@ -59,6 +63,8 @@ export function Root(props: RootProps) {
       system={props.system}
       onModelSwitch={props.onModelSwitch}
       onLogin={() => setMode("setup")}
+      route={props.route}
+      autoRoute={props.autoRoute}
     />
   );
 }

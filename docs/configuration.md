@@ -38,14 +38,37 @@ See [Providers & Models](providers.md) for current IDs.
 
 ## Routing
 
-`@polycode/router` classifies each user turn with a heuristic (`classify()`):
+`@polycode/router` classifies each user turn into a tier, then builds (and memoizes) the
+`Provider` for that tier. Two strategies:
+
+**`heuristic`** (default, free) — a regex pass (`classify()`):
 
 - context > ~200K tokens → **long**
 - mentions refactor/architect/design/debug/optimize/migrate/plan/etc., or long prompt → **strong**
 - otherwise → **cheap**
 
-It then builds (and memoizes) the `Provider` for that tier. Swap the heuristic body for a
-model-driven classifier later without touching anything else.
+**`model`** — a cheap model (the `classifier` spec, default = the cheap tier) labels each
+turn `cheap`/`strong`/`long`. It short-circuits huge context to `long` without a call,
+memoizes per normalized prompt, and **falls back to the heuristic** on any error or
+unparseable reply.
+
+```json
+"routing": {
+  "strategy": "model",
+  "classifier": { "provider": "google", "model": "gemini-2.5-flash" }
+}
+```
+
+Override at launch with `--routing model` / `--routing heuristic`. In the TUI, toggle
+per-turn auto-routing with `/route auto|off|status` (auto-routing is on by default when
+`strategy` is `model`). When auto-routing, the chosen tier is shown per turn
+(`routed → strong (openai:gpt-5.5)`).
+
+Verify the model classifier against the heuristic on sample prompts:
+
+```powershell
+corepack pnpm route-check google:gemini-2.5-flash
+```
 
 ## Keys & precedence
 

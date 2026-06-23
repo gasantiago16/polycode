@@ -14,6 +14,9 @@ importers:
       '@polycode/providers':
         specifier: workspace:*
         version: link:packages/providers
+      '@polycode/router':
+        specifier: workspace:*
+        version: link:packages/router
       '@polycode/secrets':
         specifier: workspace:*
         version: link:packages/secrets

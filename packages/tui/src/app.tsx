@@ -25,6 +25,10 @@ export interface AppProps {
   onModelSwitch?: (arg: string) => Provider;
   /** Re-open the secure key setup screen (`/login`). */
   onLogin?: () => void;
+  /** Classify a turn and return the tier's Provider (smart routing). */
+  route?: (text: string) => Promise<{ provider: Provider; tier: string; label: string }>;
+  /** Start with per-turn auto-routing enabled. */
+  autoRoute?: boolean;
 }
 
 interface PendingPerm {
@@ -33,18 +37,28 @@ interface PendingPerm {
   resolve: (allow: boolean) => void;
 }
 
-export function App({ provider, tools, cwd, system, onModelSwitch, onLogin }: AppProps) {
+export function App({
+  provider,
+  tools,
+  cwd,
+  system,
+  onModelSwitch,
+  onLogin,
+  route,
+  autoRoute: autoRouteDefault,
+}: AppProps) {
   const { exit } = useApp();
   const [lines, setLines] = useState<Line[]>([
     {
       kind: "system",
-      text: `polycode — ${provider.id}:${provider.model} — /help /model /mode /exit`,
+      text: `polycode — ${provider.id}:${provider.model} — /help /model /mode /route /exit`,
     },
   ]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [perm, setPerm] = useState<PendingPerm | null>(null);
   const [modelLabel, setModelLabel] = useState(`${provider.id}:${provider.model}`);
+  const [autoRoute, setAutoRoute] = useState(!!autoRouteDefault && !!route);
 
   const add = (line: Line) => setLines((prev) => [...prev, line]);
   const appendAssistant = (t: string) =>
@@ -120,7 +134,18 @@ export function App({ provider, tools, cwd, system, onModelSwitch, onLogin }: Ap
     if (v === "/help") {
       add({
         kind: "system",
-        text: "/model <provider:model> · /mode <plan|ask|acceptEdits|yolo> · /login · /keys · /exit",
+        text: "/model <provider:model> · /mode <plan|ask|acceptEdits|yolo> · /route <auto|off|status> · /login · /keys · /exit",
+      });
+      return;
+    }
+    if (v.startsWith("/route")) {
+      const sub = v.slice(6).trim();
+      if (!route) return add({ kind: "error", text: "routing unavailable" });
+      if (sub === "off") setAutoRoute(false);
+      else if (sub === "auto" || sub === "on") setAutoRoute(true);
+      add({
+        kind: "system",
+        text: `auto-route ${sub === "off" ? "off" : sub === "status" ? (autoRoute ? "on" : "off") : "on"}`,
       });
       return;
     }
@@ -157,6 +182,18 @@ export function App({ provider, tools, cwd, system, onModelSwitch, onLogin }: Ap
     }
 
     add({ kind: "user", text: v });
+
+    if (autoRoute && route) {
+      try {
+        const r = await route(v);
+        agentRef.current.setProvider(r.provider);
+        setModelLabel(r.label);
+        add({ kind: "system", text: `routed → ${r.tier} (${r.label})` });
+      } catch (e) {
+        add({ kind: "error", text: `route failed: ${String(e)}` });
+      }
+    }
+
     agentRef.current.pushUser(v);
     await drive();
   };

@@ -8,6 +8,7 @@
     "dev": "tsx packages/cli/src/index.ts",
     "serve": "tsx packages/cli/src/index.ts --serve",
     "smoke": "tsx scripts/smoke.ts",
+    "route-check": "tsx scripts/route-check.ts",
     "typecheck": "tsc --noEmit",
     "docs": "tsx scripts/build-docs.ts",
     "build": "tsup"
@@ -15,6 +16,7 @@
   "devDependencies": {
     "@polycode/core": "workspace:*",
     "@polycode/providers": "workspace:*",
+    "@polycode/router": "workspace:*",
     "@polycode/secrets": "workspace:*",
     "@polycode/tools": "workspace:*",
     "@types/node": "^22.7.0",

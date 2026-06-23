@@ -14,7 +14,8 @@ provider-blind agent engine.
 - ✅ Monorepo scaffolded; **typechecks clean**.
 - ✅ Canonical core (types, permission engine, agent loop).
 - ✅ Providers via AI SDK adapter: OpenAI + Gemini + xAI.
-- ✅ Smart-routing tiers (heuristic classifier).
+- ✅ Smart routing: heuristic **and** model-driven classifiers (`--routing model`),
+  with heuristic fallback; per-turn auto-routing in the TUI (`/route`).
 - ✅ Tools: read/write/edit/bash/grep/glob with permission classes.
 - ✅ Ink TUI: streaming render, permission prompt, slash commands.
 - ✅ **Secure key flow**: masked first-run setup → OS keychain (DPAPI-backed on Windows),
@@ -59,14 +60,13 @@ provider-blind agent engine.
 ## Next steps (suggested order)
 
 1. **Run the live smoke test** — paste a key via the setup screen, then
-   `corepack pnpm smoke <provider:model>`; confirm `PASS`.
-2. **Router model-driven classifier** — replace the regex heuristic with a Gemini-Flash
-   classification call.
-3. **Tool-execution sandbox** for hosted mode (container / microVM) + auth + per-session
+   `corepack pnpm smoke <provider:model>`; confirm `PASS`. Also `route-check` the classifier.
+2. **Tool-execution sandbox** for hosted mode (container / microVM) + auth + per-session
    permission policy before exposing the server.
-4. **Build & distribute** — wire `tsup`, flip package `exports` to `dist`, publish `@polycode/cli`
+3. **Build & distribute** — wire `tsup`, flip package `exports` to `dist`, publish `@polycode/cli`
    (or ship a single binary), add a Docker image for the server.
-5. **Parallel-safe tool batching** — run `parallelSafe` tools concurrently in the loop.
+4. **Parallel-safe tool batching** — run `parallelSafe` tools concurrently in the loop.
+5. **Tune the classifier** — few-shot examples / structured output; cache across sessions.
 
 ## Quick command reference
 

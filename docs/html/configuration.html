@@ -89,14 +89,30 @@
 <p>Each tier is <code>{ &quot;provider&quot;: &quot;openai&quot; | &quot;google&quot; | &quot;xai&quot;, &quot;model&quot;: &quot;&lt;id&gt;&quot; }</code>.
 See <a href="providers.html">Providers &amp; Models</a> for current IDs.</p>
 <h2>Routing</h2>
-<p><code>@polycode/router</code> classifies each user turn with a heuristic (<code>classify()</code>):</p>
+<p><code>@polycode/router</code> classifies each user turn into a tier, then builds (and memoizes) the
+<code>Provider</code> for that tier. Two strategies:</p>
+<p><strong><code>heuristic</code></strong> (default, free) — a regex pass (<code>classify()</code>):</p>
 <ul>
 <li>context &gt; ~200K tokens → <strong>long</strong></li>
 <li>mentions refactor/architect/design/debug/optimize/migrate/plan/etc., or long prompt → <strong>strong</strong></li>
 <li>otherwise → <strong>cheap</strong></li>
 </ul>
-<p>It then builds (and memoizes) the <code>Provider</code> for that tier. Swap the heuristic body for a
-model-driven classifier later without touching anything else.</p>
+<p><strong><code>model</code></strong> — a cheap model (the <code>classifier</code> spec, default = the cheap tier) labels each
+turn <code>cheap</code>/<code>strong</code>/<code>long</code>. It short-circuits huge context to <code>long</code> without a call,
+memoizes per normalized prompt, and <strong>falls back to the heuristic</strong> on any error or
+unparseable reply.</p>
+<pre><code class="language-json">&quot;routing&quot;: {
+  &quot;strategy&quot;: &quot;model&quot;,
+  &quot;classifier&quot;: { &quot;provider&quot;: &quot;google&quot;, &quot;model&quot;: &quot;gemini-2.5-flash&quot; }
+}
+</code></pre>
+<p>Override at launch with <code>--routing model</code> / <code>--routing heuristic</code>. In the TUI, toggle
+per-turn auto-routing with <code>/route auto|off|status</code> (auto-routing is on by default when
+<code>strategy</code> is <code>model</code>). When auto-routing, the chosen tier is shown per turn
+(<code>routed → strong (openai:gpt-5.5)</code>).</p>
+<p>Verify the model classifier against the heuristic on sample prompts:</p>
+<pre><code class="language-powershell">corepack pnpm route-check google:gemini-2.5-flash
+</code></pre>
 <h2>Keys &amp; precedence</h2>
 <p>Key resolution order (first hit wins):</p>
 <ol>

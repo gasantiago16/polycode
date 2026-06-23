@@ -31,8 +31,8 @@ export function startServer({ cfg, port, cwd }: ServerOptions): void {
         connection: "keep-alive",
       });
 
-      const { tier, provider } = router.route(message);
-      sse(res, "meta", { tier, model: `${provider.id}:${provider.model}` });
+      const { tier, provider } = await router.route(message);
+      sse(res, "meta", { tier, model: `${provider.id}:${provider.model}`, routing: router.strategy });
 
       const engine = new PermissionEngine("yolo", async () => true);
       const agent = new Agent(provider, tools, engine, { system: cfg.system, cwd });

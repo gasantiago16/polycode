@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { makeProvider, parseModelArg, type ProviderSpec } from "@polycode/providers";
-import type { RouterConfig, Tier } from "@polycode/router";
+import { Router, type RouterConfig, type RoutingStrategy, type Tier } from "@polycode/router";
 import { hydrateEnv } from "@polycode/secrets";
 import { tools } from "@polycode/tools";
 import { startTui, type Spec } from "@polycode/tui";
@@ -40,6 +40,7 @@ async function main(): Promise<void> {
     options: {
       model: { type: "string" }, // "openai:gpt-5.5" | "google:gemini-2.5-pro" | "xai:grok-4.3"
       tier: { type: "string" }, // cheap | strong | long
+      routing: { type: "string" }, // heuristic | model (overrides config)
       serve: { type: "boolean" },
       port: { type: "string" },
     },
@@ -50,6 +51,9 @@ async function main(): Promise<void> {
   hydrateEnv();
 
   const cfg = loadConfig();
+  if (values.routing) {
+    cfg.routing = { ...cfg.routing, strategy: values.routing as RoutingStrategy };
+  }
   const cwd = process.cwd();
 
   if (values.serve) {
@@ -65,6 +69,13 @@ async function main(): Promise<void> {
       ? cfg.tiers[values.tier as Tier]
       : undefined;
 
+  // Smart routing: enable per-turn auto-routing by default when strategy=model.
+  const router = new Router(cfg);
+  const route = async (text: string) => {
+    const { tier, provider } = await router.route(text);
+    return { provider, tier, label: `${provider.id}:${provider.model}` };
+  };
+
   startTui({
     tiers: cfg.tiers,
     forced,
@@ -73,6 +84,8 @@ async function main(): Promise<void> {
     system: cfg.system,
     buildProvider: (spec) => makeProvider(spec as ProviderSpec),
     onModelSwitch: (arg) => makeProvider(parseModelArg(arg)),
+    route,
+    autoRoute: router.strategy === "model",
   });
 }
 

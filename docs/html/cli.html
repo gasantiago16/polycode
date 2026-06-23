@@ -68,6 +68,11 @@
 <td>Live canonical-stream + read-tool round-trip test.</td>
 </tr>
 <tr>
+<td>route-check</td>
+<td><code>corepack pnpm route-check &lt;provider:model&gt;</code></td>
+<td>Compare the model classifier vs. the heuristic on sample prompts.</td>
+</tr>
+<tr>
 <td>typecheck</td>
 <td><code>corepack pnpm typecheck</code></td>
 <td><code>tsc --noEmit</code> across the workspace.</td>
@@ -103,6 +108,10 @@
 <td>Force a starting tier from your config.</td>
 </tr>
 <tr>
+<td><code>--routing &lt;heuristic|model&gt;</code></td>
+<td>Override the routing strategy (model = a cheap model picks the tier).</td>
+</tr>
+<tr>
 <td><code>--serve</code></td>
 <td>Start the server instead of the TUI.</td>
 </tr>
@@ -126,6 +135,10 @@
 <tr>
 <td><code>/mode &lt;plan|ask|acceptEdits|yolo&gt;</code></td>
 <td>Change the tool-permission mode.</td>
+</tr>
+<tr>
+<td><code>/route &lt;auto|off|status&gt;</code></td>
+<td>Toggle per-turn auto-routing (needs <code>--routing model</code> / config).</td>
 </tr>
 <tr>
 <td><code>/login</code></td>

@@ -54,7 +54,8 @@ provider-blind agent engine.</p>
 <li>✅ Monorepo scaffolded; <strong>typechecks clean</strong>.</li>
 <li>✅ Canonical core (types, permission engine, agent loop).</li>
 <li>✅ Providers via AI SDK adapter: OpenAI + Gemini + xAI.</li>
-<li>✅ Smart-routing tiers (heuristic classifier).</li>
+<li>✅ Smart routing: heuristic <strong>and</strong> model-driven classifiers (<code>--routing model</code>),
+with heuristic fallback; per-turn auto-routing in the TUI (<code>/route</code>).</li>
 <li>✅ Tools: read/write/edit/bash/grep/glob with permission classes.</li>
 <li>✅ Ink TUI: streaming render, permission prompt, slash commands.</li>
 <li>✅ <strong>Secure key flow</strong>: masked first-run setup → OS keychain (DPAPI-backed on Windows),
@@ -99,14 +100,13 @@ publishing, switch to <code>dist</code> and run <code>build</code>.</li>
 <h2>Next steps (suggested order)</h2>
 <ol>
 <li><strong>Run the live smoke test</strong> — paste a key via the setup screen, then
-<code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>.</li>
-<li><strong>Router model-driven classifier</strong> — replace the regex heuristic with a Gemini-Flash
-classification call.</li>
+<code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>. Also <code>route-check</code> the classifier.</li>
 <li><strong>Tool-execution sandbox</strong> for hosted mode (container / microVM) + auth + per-session
 permission policy before exposing the server.</li>
 <li><strong>Build &amp; distribute</strong> — wire <code>tsup</code>, flip package <code>exports</code> to <code>dist</code>, publish <code>@polycode/cli</code>
 (or ship a single binary), add a Docker image for the server.</li>
 <li><strong>Parallel-safe tool batching</strong> — run <code>parallelSafe</code> tools concurrently in the loop.</li>
+<li><strong>Tune the classifier</strong> — few-shot examples / structured output; cache across sessions.</li>
 </ol>
 <h2>Quick command reference</h2>
 <pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; install

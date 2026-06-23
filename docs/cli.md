@@ -7,6 +7,7 @@
 | dev | `corepack pnpm dev` | Launch the interactive TUI (local mode). |
 | serve | `corepack pnpm serve -- --port 8787` | Run the HTTP+SSE server (hosted mode). |
 | smoke | `corepack pnpm smoke <provider:model>` | Live canonical-stream + read-tool round-trip test. |
+| route-check | `corepack pnpm route-check <provider:model>` | Compare the model classifier vs. the heuristic on sample prompts. |
 | typecheck | `corepack pnpm typecheck` | `tsc --noEmit` across the workspace. |
 | docs | `corepack pnpm docs` | Regenerate `docs/html` from `docs/*.md`. |
 | build | `corepack pnpm build` | Bundle for distribution (tsup). |
@@ -19,6 +20,7 @@
 |---|---|
 | `--model <provider:model>` | Force a specific model (e.g. `xai:grok-4.3`). |
 | `--tier <cheap\|strong\|long>` | Force a starting tier from your config. |
+| `--routing <heuristic\|model>` | Override the routing strategy (model = a cheap model picks the tier). |
 | `--serve` | Start the server instead of the TUI. |
 | `--port <n>` | Server port (default 8787). |
 
@@ -28,6 +30,7 @@
 |---|---|
 | `/model <provider:model>` | Switch model at runtime (history is preserved). |
 | `/mode <plan\|ask\|acceptEdits\|yolo>` | Change the tool-permission mode. |
+| `/route <auto\|off\|status>` | Toggle per-turn auto-routing (needs `--routing model` / config). |
 | `/login` | Re-open the masked key setup screen. |
 | `/keys` | Show configured providers + active backend (names only). |
 | `/help` | List commands. |
