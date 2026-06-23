@@ -8,6 +8,15 @@ runtime model switching, smart routing, and an optional hosted server mode.
 > are wired end-to-end. Model IDs and a couple of SDK field names are flagged to confirm
 > before first real run (see notes below).
 
+## Documentation
+
+Full docs live in [`docs/`](docs/index.md) (Markdown) with a generated HTML copy in
+[`docs/html/`](docs/html/index.html). Regenerate the HTML with `corepack pnpm docs`.
+
+- [Overview](docs/index.md) · [Architecture](docs/architecture.md) · [Getting Started](docs/getting-started.md) · [Configuration](docs/configuration.md)
+- [Providers & Models](docs/providers.md) · [Security & Keys](docs/security.md) · [CLI Reference](docs/cli.md) · [Packages](docs/packages.md)
+- **[Continuity / Handoff](docs/continuity.md)** — current state, decisions, gotchas, next steps
+
 ## Architecture
 
 ```

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Security & Keys · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html" class="active">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="continuity.html">Continuity / Handoff</a></nav>
+<main>
+<h1>Security &amp; Keys</h1>
+<h2>Key storage</h2>
+<p><code>@polycode/secrets</code> stores provider API keys in the most secure backend available:</p>
+<ol>
+<li><strong>OS keychain</strong> (preferred) — via <code>@napi-rs/keyring</code>. On Windows this is the Credential
+Manager, <strong>DPAPI-backed</strong> (encrypted at rest, scoped to your login). Verified active on
+the dev box.</li>
+<li><strong><code>0600</code> file fallback</strong> — <code>credentials.json</code> in the user config dir
+(<code>%APPDATA%\polycode</code> on Windows, <code>~/.config/polycode</code> elsewhere) if the keychain module
+isn&#39;t available. Plaintext, but outside the repo and protected by user-profile ACLs /
+POSIX <code>0600</code>.</li>
+</ol>
+<p><code>backendName()</code> reports which is active; <code>storeLocation()</code> shows where.</p>
+<h2>Resolution order</h2>
+<p>When the app needs a key it checks, in order:</p>
+<ol>
+<li><code>process.env</code> (including a loaded <code>.env</code>)</li>
+<li>OS keychain</li>
+<li>file store</li>
+</ol>
+<p><code>hydrateEnv()</code> copies stored keys into <code>process.env</code> (without overwriting existing values)
+so the AI SDK provider factory — which reads env — can see them.</p>
+<h2>What is never done with keys</h2>
+<ul>
+<li><strong>Never echoed</strong> — the setup screen masks input (<code>•</code>).</li>
+<li><strong>Never logged</strong> — keys are not printed; <code>/keys</code> shows provider names only, never values.</li>
+<li><strong>Never committed</strong> — keys live in the keychain or the user config dir, not the repo.
+<code>.env</code> is git-ignored.</li>
+<li><strong>Never sent anywhere</strong> except the chosen provider&#39;s own API.</li>
+</ul>
+<h2>Permission modes (tool gating)</h2>
+<p>The agent gates every tool call by its <code>permission</code> class (<code>safe</code> | <code>mutating</code> |
+<code>dangerous</code>) according to the active mode (<code>/mode &lt;...&gt;</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>safe</th>
+<th>mutating (write/edit)</th>
+<th>dangerous (bash)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>plan</code></td>
+<td>allow</td>
+<td><strong>refuse</strong></td>
+<td><strong>refuse</strong></td>
+</tr>
+<tr>
+<td><code>ask</code> (default)</td>
+<td>allow</td>
+<td>prompt</td>
+<td>prompt</td>
+</tr>
+<tr>
+<td><code>acceptEdits</code></td>
+<td>allow</td>
+<td>allow</td>
+<td>prompt</td>
+</tr>
+<tr>
+<td><code>yolo</code></td>
+<td>allow</td>
+<td>allow</td>
+<td>allow</td>
+</tr>
+</tbody></table>
+<p>Use <code>yolo</code> only in sandboxes / CI.</p>
+<h2>Tool path safety</h2>
+<p>File tools resolve paths against the working directory and reject paths that escape the
+project root (<code>..</code> traversal). <code>bash</code> is classified <code>dangerous</code> and gated accordingly.</p>
+<h2>Hosted-mode caveats (before exposing the server)</h2>
+<p>The scaffold server runs tools in <code>yolo</code> mode in its own working directory. <strong>Before any
+real deployment:</strong></p>
+<ul>
+<li>Add authentication and per-request/per-session permission policy.</li>
+<li>Run tool execution inside a <strong>sandbox</strong> (container / Vercel Sandbox / microVM), not the
+host filesystem.</li>
+<li>Apply rate limiting and audit logging.</li>
+</ul>
+<p>These are tracked in <a href="continuity.html">Continuity / Handoff</a>.</p>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

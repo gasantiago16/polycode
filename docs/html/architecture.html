@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Architecture · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html" class="active">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="continuity.html">Continuity / Handoff</a></nav>
+<main>
+<h1>Architecture</h1>
+<h2>Layers</h2>
+<pre><code>TUI (Ink)        input · streaming render · masked key setup · permission prompt · /slash
+   │
+Agent loop       provider-blind: stream → tool calls → permission gate → execute →
+(core)           feed results back → repeat until end_turn
+   │
+Provider         interface: stream(req) → AsyncIterable&lt;CanonicalEvent&gt;
+(core interface)
+   │
+AI SDK adapter   canonical ⇄ OpenAI / Gemini / xAI  (the only AI-SDK-aware code)
+(providers)
+   │
+Router           classify a turn → pick a model tier (cheap / strong / long)
+Tools            read · write · edit · bash · grep · glob  (+ permission class)
+Secrets          env/.env → OS keychain → 0600 file
+Server           the same engine over HTTP+SSE (hosted mode)
+</code></pre>
+<h2>The canonical model (why multi-model works)</h2>
+<p>The agent loop, tools, permission engine, and UI <strong>never</strong> see a provider-specific shape.
+Everything is normalized to canonical types in <code>@polycode/core</code>:</p>
+<ul>
+<li><code>CanonicalMessage</code> — <code>role</code> + <code>ContentPart[]</code> (<code>text</code> | <code>reasoning</code> | <code>tool_call</code> | <code>tool_result</code>)</li>
+<li><code>CanonicalEvent</code> — the streaming union: <code>text_delta</code> | <code>reasoning_delta</code> | <code>tool_call</code> | <code>stop</code> | <code>error</code></li>
+<li><code>ToolSpec</code> — <code>name</code>, <code>description</code>, JSON-Schema <code>parameters</code>, <code>permission</code> class, <code>parallelSafe</code>, <code>run()</code></li>
+<li><code>Provider</code> — <code>id</code>, <code>model</code>, <code>capabilities()</code>, <code>stream(req)</code>, optional <code>countTokens()</code></li>
+<li><code>Capabilities</code> — context window, max output, tool/reasoning/caching/vision/parallel flags</li>
+</ul>
+<p>A provider adapter translates <strong>both directions</strong>: canonical request → provider call, and
+provider stream/messages → canonical events/messages. Add a provider by writing one adapter;
+nothing in the loop, tools, or UI changes.</p>
+<h2>Provider differences the adapter hides</h2>
+<table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>OpenAI</th>
+<th>Gemini</th>
+<th>xAI</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tool call args</td>
+<td>JSON <strong>string</strong></td>
+<td>object</td>
+<td>JSON string</td>
+</tr>
+<tr>
+<td>Tool result shape</td>
+<td><code>tool</code> role msg</td>
+<td><code>functionResponse</code></td>
+<td><code>tool</code> role msg</td>
+</tr>
+<tr>
+<td>Stop reason</td>
+<td><code>stop</code>/<code>tool_calls</code>/<code>length</code></td>
+<td><code>STOP</code>/<code>MAX_TOKENS</code></td>
+<td><code>stop</code>/<code>tool_calls</code></td>
+</tr>
+<tr>
+<td>Reasoning</td>
+<td>reasoning effort + summary</td>
+<td>thinking / budget</td>
+<td>reasoning effort</td>
+</tr>
+<tr>
+<td>Caching</td>
+<td>automatic</td>
+<td>explicit context cache</td>
+<td>automatic</td>
+</tr>
+</tbody></table>
+<p>All of these collapse into the canonical <code>CanonicalEvent</code> / <code>Capabilities</code> surface.</p>
+<h2>The agent loop</h2>
+<p>One <code>provider.stream()</code> call == one model turn. The loop deliberately does <strong>not</strong> let the
+provider auto-execute tools — it collects tool calls, runs them through the permission
+engine, executes (sequentially for now so prompts don&#39;t overlap), appends results, and
+loops until <code>stop_reason</code> is <code>end_turn</code>.</p>
+<pre><code>pushUser(text)
+└─ run():
+   loop:
+     stream a turn ──▶ emit text_delta / reasoning_delta / tool_call / stop
+     if stop != tool_use: emit turn_complete; return
+     for each tool_call:
+        permission.check() ──▶ allow? execute : deny
+        emit tool_executing / tool_result / tool_denied
+     append tool results as a tool message
+</code></pre>
+<p>This keeps gating, rendering, and (later) parallel scheduling under our control rather than
+the SDK&#39;s.</p>
+<h2>Local vs hosted — one engine</h2>
+<p><code>@polycode/core</code> is transport-agnostic. The Ink TUI imports it directly for local use; the
+<code>@polycode/server</code> package wraps the identical engine behind <code>POST /chat</code> (SSE). Runtime
+<code>/model</code> switching and router-driven selection both work by swapping the <code>Provider</code> the loop
+holds — no other change.</p>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

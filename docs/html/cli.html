@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CLI Reference · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html" class="active">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="continuity.html">Continuity / Handoff</a></nav>
+<main>
+<h1>CLI Reference</h1>
+<h2>Scripts (run via Corepack pnpm)</h2>
+<table>
+<thead>
+<tr>
+<th>Script</th>
+<th>Command</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>dev</td>
+<td><code>corepack pnpm dev</code></td>
+<td>Launch the interactive TUI (local mode).</td>
+</tr>
+<tr>
+<td>serve</td>
+<td><code>corepack pnpm serve -- --port 8787</code></td>
+<td>Run the HTTP+SSE server (hosted mode).</td>
+</tr>
+<tr>
+<td>smoke</td>
+<td><code>corepack pnpm smoke &lt;provider:model&gt;</code></td>
+<td>Live canonical-stream + read-tool round-trip test.</td>
+</tr>
+<tr>
+<td>typecheck</td>
+<td><code>corepack pnpm typecheck</code></td>
+<td><code>tsc --noEmit</code> across the workspace.</td>
+</tr>
+<tr>
+<td>docs</td>
+<td><code>corepack pnpm docs</code></td>
+<td>Regenerate <code>docs/html</code> from <code>docs/*.md</code>.</td>
+</tr>
+<tr>
+<td>build</td>
+<td><code>corepack pnpm build</code></td>
+<td>Bundle for distribution (tsup).</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>Pass CLI flags after <code>--</code>, e.g. <code>corepack pnpm dev -- --model openai:gpt-5.5</code>.</p>
+</blockquote>
+<h2>Flags</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--model &lt;provider:model&gt;</code></td>
+<td>Force a specific model (e.g. <code>xai:grok-4.3</code>).</td>
+</tr>
+<tr>
+<td><code>--tier &lt;cheap|strong|long&gt;</code></td>
+<td>Force a starting tier from your config.</td>
+</tr>
+<tr>
+<td><code>--serve</code></td>
+<td>Start the server instead of the TUI.</td>
+</tr>
+<tr>
+<td><code>--port &lt;n&gt;</code></td>
+<td>Server port (default 8787).</td>
+</tr>
+</tbody></table>
+<h2>Slash commands (in the TUI)</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/model &lt;provider:model&gt;</code></td>
+<td>Switch model at runtime (history is preserved).</td>
+</tr>
+<tr>
+<td><code>/mode &lt;plan|ask|acceptEdits|yolo&gt;</code></td>
+<td>Change the tool-permission mode.</td>
+</tr>
+<tr>
+<td><code>/login</code></td>
+<td>Re-open the masked key setup screen.</td>
+</tr>
+<tr>
+<td><code>/keys</code></td>
+<td>Show configured providers + active backend (names only).</td>
+</tr>
+<tr>
+<td><code>/help</code></td>
+<td>List commands.</td>
+</tr>
+<tr>
+<td><code>/exit</code> (or <code>/quit</code>)</td>
+<td>Quit.</td>
+</tr>
+</tbody></table>
+<h2>Permission prompt</h2>
+<p>When a gated tool runs (per the active <code>/mode</code>), the TUI shows:</p>
+<pre><code>Allow &lt;tool&gt; [&lt;class&gt;]? &lt;input&gt;  (y/n)
+</code></pre>
+<p>Press <code>y</code> to allow, <code>n</code> (or <code>Esc</code>) to deny. A denied call is reported back to the model so
+it can adapt.</p>
+<h2>Server endpoints (hosted mode)</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Path</th>
+<th>Body</th>
+<th>Response</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>POST</code></td>
+<td><code>/chat</code></td>
+<td><code>{&quot;message&quot;: &quot;...&quot;}</code></td>
+<td>SSE: <code>meta</code>, <code>event</code> (AgentUIEvent frames), <code>done</code></td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/health</code></td>
+<td>—</td>
+<td><code>{&quot;ok&quot;: true}</code></td>
+</tr>
+</tbody></table>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

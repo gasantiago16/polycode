@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Continuity / Handoff · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="continuity.html" class="active">Continuity / Handoff</a></nav>
+<main>
+<h1>Continuity / Handoff</h1>
+<p>A single place to pick the project back up — current state, decisions, gotchas, and what&#39;s next.</p>
+<h2>What polycode is</h2>
+<p>A Codex/Claude-Code-style terminal coding agent, <strong>provider-agnostic</strong> across OpenAI,
+Google Gemini, and xAI (Grok). TypeScript pnpm monorepo. Goals: runtime model switching,
+smart routing, secure local key setup, and an optional hosted server — all on one
+provider-blind agent engine.</p>
+<h2>Current status (as of the latest commit)</h2>
+<ul>
+<li>✅ Monorepo scaffolded; <strong>typechecks clean</strong>.</li>
+<li>✅ Canonical core (types, permission engine, agent loop).</li>
+<li>✅ Providers via AI SDK adapter: OpenAI + Gemini + xAI.</li>
+<li>✅ Smart-routing tiers (heuristic classifier).</li>
+<li>✅ Tools: read/write/edit/bash/grep/glob with permission classes.</li>
+<li>✅ Ink TUI: streaming render, permission prompt, slash commands.</li>
+<li>✅ <strong>Secure key flow</strong>: masked first-run setup → OS keychain (DPAPI-backed on Windows),
+<code>0600</code> file fallback. Keychain backend <strong>verified active</strong>.</li>
+<li>✅ Hosted server: <code>POST /chat</code> (SSE) + <code>/health</code>.</li>
+<li>✅ Live smoke harness (<code>pnpm smoke &lt;provider:model&gt;</code>).</li>
+<li>✅ Docs in Markdown + generated HTML (<code>docs/</code>, <code>docs/html/</code>).</li>
+<li>⏳ <strong>Live end-to-end provider call not yet run</strong> — needs a real key pasted via the setup
+screen, then <code>pnpm smoke</code>.</li>
+</ul>
+<h2>Key decisions (and why)</h2>
+<ol>
+<li><strong>TypeScript + Ink + Vercel AI SDK</strong> — closest to the Claude Code look; best multi-model
+SDK; npm distribution.</li>
+<li><strong>Unifying SDK behind our own <code>Provider</code> interface</strong> — fast to build, not locked in; can
+drop a hand-rolled adapter per provider where the SDK flattens something we need.</li>
+<li><strong>Anthropic intentionally excluded</strong> — providers are OpenAI / Gemini / xAI only. Do not
+add <code>@ai-sdk/anthropic</code> or <code>claude-*</code> models.</li>
+<li><strong>Provider-blind core</strong> — loop/tools/permissions/UI see only canonical types; the seam
+that makes multi-model work.</li>
+<li><strong>Engine reused local + hosted</strong> — <code>core</code> is transport-agnostic; TUI imports it, server
+wraps it.</li>
+<li><strong>Keys in the OS keychain</strong> — secure-by-default; masked input; never logged/committed.</li>
+</ol>
+<h2>Gotchas (read before you debug)</h2>
+<ul>
+<li><strong>pnpm not on PATH; Corepack can&#39;t write shims without admin.</strong> Use
+<code>corepack pnpm -C &quot;&lt;repo&gt;&quot; &lt;cmd&gt;</code>. <code>corepack enable</code> from an admin shell fixes it.</li>
+<li><strong>Model IDs churn.</strong> Confirmed June 2026: <code>gpt-5.5</code>, <code>gemini-2.5-flash</code>/<code>-pro</code>,
+<code>grok-4.3</code>. <code>grok-4</code> is retired; <code>gpt-5</code> is superseded. See <a href="providers.html">Providers</a>.</li>
+<li><strong>AI SDK v5 stream shapes.</strong> The adapter switches on <code>fullStream</code> part types
+(<code>text-delta</code>, <code>reasoning-delta</code>, <code>tool-call</code>, <code>finish</code>). Re-verify on a major SDK bump.</li>
+<li><strong>Capability numbers are estimates</strong> in <code>packages/providers/src/index.ts</code>.</li>
+<li><strong>Dev resolution.</strong> Packages point <code>main</code>/<code>exports</code> at <code>src/index.ts</code> for <code>tsx</code>. For
+publishing, switch to <code>dist</code> and run <code>build</code>.</li>
+</ul>
+<h2>Repo</h2>
+<ul>
+<li><code>gasantiago16/polycode</code> (<strong>private</strong>), default branch <code>main</code>.</li>
+<li>Commits: baseline scaffold → secure key setup + smoke harness → docs.</li>
+</ul>
+<h2>Next steps (suggested order)</h2>
+<ol>
+<li><strong>Run the live smoke test</strong> — paste a key via the setup screen, then
+<code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>.</li>
+<li><strong>Router model-driven classifier</strong> — replace the regex heuristic with a Gemini-Flash
+classification call.</li>
+<li><strong>Tool-execution sandbox</strong> for hosted mode (container / microVM) + auth + per-session
+permission policy before exposing the server.</li>
+<li><strong>Build &amp; distribute</strong> — wire <code>tsup</code>, flip package <code>exports</code> to <code>dist</code>, publish <code>@polycode/cli</code>
+(or ship a single binary), add a Docker image for the server.</li>
+<li><strong>Parallel-safe tool batching</strong> — run <code>parallelSafe</code> tools concurrently in the loop.</li>
+</ol>
+<h2>Quick command reference</h2>
+<pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; install
+corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; dev          # TUI (first run = key setup)
+corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; smoke google:gemini-2.5-flash
+corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; typecheck
+corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; docs
+</code></pre>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

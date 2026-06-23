@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Providers & Models · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html" class="active">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="continuity.html">Continuity / Handoff</a></nav>
+<main>
+<h1>Providers &amp; Models</h1>
+<p>Supported providers: <strong>OpenAI</strong>, <strong>Google Gemini</strong>, <strong>xAI (Grok)</strong>. (Anthropic is
+intentionally out of scope for this project.)</p>
+<p>All three are reached through one adapter over the Vercel AI SDK
+(<code>@ai-sdk/openai</code>, <code>@ai-sdk/google</code>, <code>@ai-sdk/xai</code>), behind the canonical <code>Provider</code>
+interface in <code>@polycode/core</code>.</p>
+<h2>Current model IDs (confirmed June 2026)</h2>
+<blockquote>
+<p>Model IDs churn. These were verified against provider docs in June 2026 — re-check before
+relying on them long-term.</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>Good defaults</th>
+<th>Cheaper / other</th>
+<th>Newer</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenAI</td>
+<td><code>gpt-5.5</code> (flagship)</td>
+<td><code>gpt-5.4-mini</code>, <code>gpt-5.4-nano</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Google</td>
+<td><code>gemini-2.5-flash</code>, <code>gemini-2.5-pro</code></td>
+<td><code>gemini-2.5-flash-lite</code></td>
+<td><code>gemini-3.5-flash</code>, <code>gemini-3.1-pro</code></td>
+</tr>
+<tr>
+<td>xAI</td>
+<td><code>grok-4.3</code></td>
+<td><code>grok-code-fast-1</code></td>
+<td>—</td>
+</tr>
+</tbody></table>
+<p>Notes:</p>
+<ul>
+<li>OpenAI&#39;s <code>gpt-5</code> is superseded by the 5.4/5.5 line.</li>
+<li>xAI&#39;s <code>grok-4</code> is retired (requests redirect to <code>grok-4.3</code>).</li>
+<li>Gemini <code>gemini-2.5-flash</code> is a safe, cheap smoke-test target.</li>
+</ul>
+<h2>Selecting a model</h2>
+<ul>
+<li>Per session: <code>--model openai:gpt-5.5</code></li>
+<li>At runtime in the TUI: <code>/model google:gemini-2.5-pro</code></li>
+<li>Per tier: edit <code>tiers</code> in <code>polycode.config.json</code> (see <a href="configuration.html">Configuration</a>)</li>
+</ul>
+<p>The format is always <code>provider:model</code>, where provider is <code>openai</code>, <code>google</code>, or <code>xai</code>.</p>
+<h2>Capabilities</h2>
+<p>Each provider reports a <code>Capabilities</code> object (context window, max output, tool/reasoning/
+caching/vision/parallel flags) consumed by the loop. The numbers in
+<code>packages/providers/src/index.ts</code> are estimates — confirm against provider docs and adjust.</p>
+<h2>Reasoning effort</h2>
+<p>The canonical <code>reasoningEffort</code> knob (<code>low</code> | <code>medium</code> | <code>high</code>) maps per provider in the
+adapter:</p>
+<ul>
+<li>OpenAI → <code>providerOptions.openai.reasoningEffort</code></li>
+<li>xAI → <code>providerOptions.xai.reasoningEffort</code></li>
+<li>Gemini → <code>providerOptions.google.thinkingConfig</code></li>
+</ul>
+<h2>Adding a new provider</h2>
+<ol>
+<li>Add the AI SDK provider package (e.g. <code>@ai-sdk/&lt;x&gt;</code>) to <code>@polycode/providers</code>.</li>
+<li>In <code>packages/providers/src/index.ts</code>: extend <code>ProviderId</code>, add a <code>Capabilities</code> const,
+add a <code>case</code> in <code>makeProvider</code>, and accept it in <code>parseModelArg</code>.</li>
+<li>Add it to <code>PROVIDERS</code> / <code>ENV_VAR</code> / labels in <code>@polycode/secrets</code> so the setup screen
+and key store know about it.</li>
+<li>If it has a non-standard reasoning param, extend <code>reasoningOptions()</code> in the adapter.</li>
+</ol>
+<p>No changes to the agent loop, tools, router, or UI are required.</p>
+<blockquote>
+<p><strong>AI SDK version note:</strong> the adapter&#39;s <code>fullStream</code> part field names (<code>text-delta</code>,
+<code>reasoning-delta</code>, <code>tool-call</code>, <code>finish</code>) track AI SDK v5. Re-verify on a major SDK bump.</p>
+</blockquote>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

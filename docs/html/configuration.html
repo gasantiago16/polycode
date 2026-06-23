@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Configuration · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html" class="active">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="continuity.html">Continuity / Handoff</a></nav>
+<main>
+<h1>Configuration</h1>
+<h2>Config file</h2>
+<p><code>polycode</code> looks for a JSON config in this order and uses the first found:</p>
+<ol>
+<li><code>./polycode.config.json</code> (current working directory)</li>
+<li><code>~/.config/polycode/config.json</code> (or <code>%APPDATA%\polycode\config.json</code> on Windows)</li>
+</ol>
+<p>Anything you set is merged over the built-in defaults. Start from the example:</p>
+<pre><code class="language-powershell">cp polycode.config.example.json polycode.config.json
+</code></pre>
+<pre><code class="language-json">{
+  &quot;system&quot;: &quot;You are polycode, a terminal coding agent. Be concise. Use tools to inspect and edit the project.&quot;,
+  &quot;tiers&quot;: {
+    &quot;cheap&quot;:  { &quot;provider&quot;: &quot;google&quot;, &quot;model&quot;: &quot;gemini-2.5-flash&quot; },
+    &quot;strong&quot;: { &quot;provider&quot;: &quot;openai&quot;, &quot;model&quot;: &quot;gpt-5.5&quot; },
+    &quot;long&quot;:   { &quot;provider&quot;: &quot;google&quot;, &quot;model&quot;: &quot;gemini-2.5-pro&quot; }
+  }
+}
+</code></pre>
+<h3>Fields</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>system</code></td>
+<td>System prompt sent to the model every turn.</td>
+</tr>
+<tr>
+<td><code>tiers.cheap</code></td>
+<td>Model for simple turns (edits, lookups).</td>
+</tr>
+<tr>
+<td><code>tiers.strong</code></td>
+<td>Model for reasoning / multi-file / planning turns.</td>
+</tr>
+<tr>
+<td><code>tiers.long</code></td>
+<td>Model for very large context.</td>
+</tr>
+</tbody></table>
+<p>Each tier is <code>{ &quot;provider&quot;: &quot;openai&quot; | &quot;google&quot; | &quot;xai&quot;, &quot;model&quot;: &quot;&lt;id&gt;&quot; }</code>.
+See <a href="providers.html">Providers &amp; Models</a> for current IDs.</p>
+<h2>Routing</h2>
+<p><code>@polycode/router</code> classifies each user turn with a heuristic (<code>classify()</code>):</p>
+<ul>
+<li>context &gt; ~200K tokens → <strong>long</strong></li>
+<li>mentions refactor/architect/design/debug/optimize/migrate/plan/etc., or long prompt → <strong>strong</strong></li>
+<li>otherwise → <strong>cheap</strong></li>
+</ul>
+<p>It then builds (and memoizes) the <code>Provider</code> for that tier. Swap the heuristic body for a
+model-driven classifier later without touching anything else.</p>
+<h2>Keys &amp; precedence</h2>
+<p>Key resolution order (first hit wins):</p>
+<ol>
+<li><code>process.env</code> (including a <code>.env</code> file you load)</li>
+<li>OS keychain</li>
+<li><code>0600</code> file store in the user config dir</li>
+</ol>
+<p>Env vars: <code>OPENAI_API_KEY</code>, <code>GOOGLE_GENERATIVE_AI_API_KEY</code>, <code>XAI_API_KEY</code>. See
+<a href="security.html">Security &amp; Keys</a>.</p>
+<h2>CLI overrides</h2>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--model &lt;provider:model&gt;</code></td>
+<td>Force a specific model for the session.</td>
+</tr>
+<tr>
+<td><code>--tier &lt;cheap|strong|long&gt;</code></td>
+<td>Force a starting tier.</td>
+</tr>
+<tr>
+<td><code>--serve</code></td>
+<td>Run the HTTP+SSE server instead of the TUI.</td>
+</tr>
+<tr>
+<td><code>--port &lt;n&gt;</code></td>
+<td>Server port (default 8787).</td>
+</tr>
+</tbody></table>
+<h2>Environment variables</h2>
+<table>
+<thead>
+<tr>
+<th>Var</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>OPENAI_API_KEY</code> / <code>GOOGLE_GENERATIVE_AI_API_KEY</code> / <code>XAI_API_KEY</code></td>
+<td>Provider keys (highest precedence).</td>
+</tr>
+<tr>
+<td><code>POLYCODE_CONFIG_DIR</code></td>
+<td>Override where the key file store + config live.</td>
+</tr>
+</tbody></table>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>
