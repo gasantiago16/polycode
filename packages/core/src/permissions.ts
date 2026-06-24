@@ -47,13 +47,15 @@ export class PermissionEngine {
   async check(tool: ToolSpec, input: unknown): Promise<PermissionDecision> {
     const cls = tool.permission;
 
-    if (this.mode === "yolo") return { allow: true };
     if (cls === "safe") return { allow: true };
-    if (this.sessionAllowed.has(tool.name)) return { allow: true };
+    if (this.mode === "yolo") return { allow: true };
 
+    // plan is a hard read-only guarantee — it overrides prior "always" grants.
     if (this.mode === "plan") {
       return { allow: false, reason: "plan mode: read-only tools only" };
     }
+
+    if (this.sessionAllowed.has(tool.name)) return { allow: true };
     if (this.mode === "acceptEdits" && cls === "mutating") {
       return { allow: true };
     }
