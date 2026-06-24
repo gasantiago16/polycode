@@ -1,4 +1,4 @@
-import type { ToolSpec, ToolContext, ToolRunResult } from "@polycode/core";
+import type { ToolSpec, ToolContext, ToolRunResult, Sandbox } from "@polycode/core";
 
 const MAX_OUTPUT = 60_000;
 
@@ -182,7 +182,7 @@ interface GrepInput {
 const grep: ToolSpec = {
   name: "grep",
   description:
-    "Search file contents for a regex. Uses ripgrep when available, falls back to a JS scan. Returns file:line: matches.",
+    "Search file contents for a regex. Uses ripgrep when available, else a JS scan. Match lines are 'file:line: text'; context lines are 'file-line- text'.",
   permission: "safe",
   parallelSafe: true,
   parameters: {
@@ -325,42 +325,52 @@ function normalizeDir(p?: string): string {
   return s ? s + "/" : "";
 }
 
-/** Quote one argument for the sandbox shell (cmd.exe on Windows, sh elsewhere). */
-function quoteArg(s: string): string {
-  const win = (globalThis as any).process?.platform === "win32";
-  if (win) return `"${s.replace(/"/g, '""')}"`;
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
+// Probe ripgrep once per sandbox (the model calls grep constantly, often in
+// parallel batches — re-probing every call would spawn N extra processes).
+const rgProbe = new WeakMap<Sandbox, Promise<boolean>>();
 
 async function hasRipgrep(ctx: ToolContext): Promise<boolean> {
-  try {
-    const r = await ctx.sandbox.exec("rg --version", { timeoutMs: 5_000 });
-    return r.code === 0 && /ripgrep/i.test(r.stdout);
-  } catch {
-    return false;
+  let probe = rgProbe.get(ctx.sandbox);
+  if (!probe) {
+    probe = (async () => {
+      try {
+        const r = await ctx.sandbox.execFile("rg", ["--version"], { timeoutMs: 5_000 });
+        return r.code === 0 && /ripgrep/i.test(r.stdout);
+      } catch {
+        return false;
+      }
+    })();
+    rgProbe.set(ctx.sandbox, probe);
   }
+  return probe;
 }
 
 async function runRipgrep(input: GrepInput, ctx: ToolContext): Promise<ToolRunResult> {
-  const parts = ["rg", "--line-number", "--no-heading", "--color", "never"];
-  if (input.ignore_case) parts.push("-i");
-  if (input.context && input.context > 0) parts.push("-C", String(Math.floor(input.context)));
-  if (input.glob) parts.push("-g", quoteArg(input.glob));
-  parts.push("-e", quoteArg(input.pattern));
-  if (input.path) parts.push(quoteArg(input.path));
+  const cap = Math.max(1, Math.floor(input.max_results ?? 200));
+  const ctxN = input.context && input.context > 0 ? Math.floor(input.context) : 0;
 
-  const r = await ctx.sandbox.exec(parts.join(" "));
+  // Built as an explicit argv (no shell): nothing here is shell-parsed, so a
+  // model-supplied pattern/glob/path can't inject a command.
+  const args = ["--line-number", "--no-heading", "--color", "never", "--max-count", String(cap)];
+  if (input.ignore_case) args.push("-i");
+  if (ctxN > 0) args.push("-C", String(ctxN));
+  if (input.glob) args.push("-g", input.glob);
+  args.push("-e", input.pattern);
+  // `--` ends options so a path beginning with `-` can't be read as a flag
+  // (rg has flags like --pre that execute programs).
+  if (input.path) args.push("--", input.path);
+
+  const r = await ctx.sandbox.execFile("rg", args, { signal: ctx.signal });
   // rg exit codes: 0 = matches, 1 = no matches, 2 = error.
   if (r.code !== 0 && r.code !== 1) {
     return { output: clamp((r.stderr || r.stdout).trim() || "grep failed"), isError: true };
   }
   let text = r.stdout.replace(/\s+$/, "");
-  const cap = Math.max(1, Math.floor(input.max_results ?? 200));
-  if (!input.context) {
-    const lines = text ? text.split("\n") : [];
-    if (lines.length > cap) {
-      text = lines.slice(0, cap).join("\n") + `\n…[truncated at ${cap} matches]`;
-    }
+  // --max-count caps per-file; also bound the total output (context inflates it).
+  const lineBudget = cap * (1 + 2 * ctxN) + cap;
+  const lines = text ? text.split("\n") : [];
+  if (lines.length > lineBudget) {
+    text = lines.slice(0, lineBudget).join("\n") + `\n…[output truncated]`;
   }
   return { output: clamp(text || "(no matches)") };
 }

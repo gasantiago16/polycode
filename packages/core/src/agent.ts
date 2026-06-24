@@ -197,10 +197,14 @@ export class Agent {
 
       let idx = 0;
       while (idx < pending.length) {
-        // Gather a run of consecutive parallel-safe calls.
+        // Gather a run of consecutive read-only calls that are BOTH parallelSafe
+        // and "safe" class — safe never prompts, so concurrency can't overlap
+        // permission dialogs or run a mutation alongside reads.
         const batch: ToolCallPart[] = [];
-        while (idx < pending.length && toolMap.get(pending[idx].name)?.parallelSafe) {
-          batch.push(pending[idx++]);
+        while (idx < pending.length) {
+          const t = toolMap.get(pending[idx].name);
+          if (t?.parallelSafe && t.permission === "safe") batch.push(pending[idx++]);
+          else break;
         }
 
         if (batch.length > 1) {

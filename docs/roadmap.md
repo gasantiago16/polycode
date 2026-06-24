@@ -32,7 +32,8 @@ Verification: `pnpm typecheck` clean; live `pnpm smoke xai:grok-4.3` round-trip 
 
 The tools were capable-but-thin; Phase 2 brought them to Claude-Code standard.
 
-- **`grep`** — ripgrep fast-path (auto-detected, cross-shell argument quoting) with a much
+- **`grep`** — ripgrep fast-path invoked through a **no-shell `execFile`** (argv passed straight
+  to the binary, so a model-supplied pattern/glob/path can't inject a command), with a much
   stronger JS-walk fallback supporting `ignore_case`, a `glob` filter, `context` lines, and
   `max_results`. When `rg` is not on PATH the JS path runs transparently.
 - **`edit` uniqueness guard** — errors with a match count when `old_string` is not unique

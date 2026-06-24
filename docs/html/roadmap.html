@@ -73,7 +73,8 @@ text and tool calls are never duplicated. User interrupts (<code>esc</code>) sti
 <h2>Phase 2 — Tools parity ✅ (2026-06-24)</h2>
 <p>The tools were capable-but-thin; Phase 2 brought them to Claude-Code standard.</p>
 <ul>
-<li><strong><code>grep</code></strong> — ripgrep fast-path (auto-detected, cross-shell argument quoting) with a much
+<li><strong><code>grep</code></strong> — ripgrep fast-path invoked through a <strong>no-shell <code>execFile</code></strong> (argv passed straight
+to the binary, so a model-supplied pattern/glob/path can&#39;t inject a command), with a much
 stronger JS-walk fallback supporting <code>ignore_case</code>, a <code>glob</code> filter, <code>context</code> lines, and
 <code>max_results</code>. When <code>rg</code> is not on PATH the JS path runs transparently.</li>
 <li><strong><code>edit</code> uniqueness guard</strong> — errors with a match count when <code>old_string</code> is not unique

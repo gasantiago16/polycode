@@ -80,6 +80,12 @@ export interface Sandbox {
   readFile(relPath: string): Promise<string>;
   writeFile(relPath: string, content: string): Promise<void>;
   exec(command: string, opts?: ExecOptions): Promise<ExecResult>;
+  /**
+   * Run a program with an explicit argv (no shell). Safe for untrusted args —
+   * nothing is parsed by a shell — so `safe`-class tools can invoke binaries
+   * (e.g. ripgrep) without opening a command-injection hole.
+   */
+  execFile(file: string, args: string[], opts?: ExecOptions): Promise<ExecResult>;
   /** Yield project-relative file paths (ignoring node_modules/.git/etc.). */
   walk(): AsyncIterable<string>;
   dispose(): Promise<void>;
