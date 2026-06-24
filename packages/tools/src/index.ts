@@ -63,8 +63,18 @@ const write: ToolSpec = {
     additionalProperties: false,
   },
   async run(input: { path: string; content: string }, ctx: ToolContext) {
+    let before: string | undefined;
+    try {
+      before = await ctx.sandbox.readFile(input.path);
+    } catch {
+      before = undefined; // new file
+    }
     await ctx.sandbox.writeFile(input.path, input.content);
-    return { output: `wrote ${input.content.length} bytes to ${input.path}` };
+    const verb = before === undefined ? "created" : "wrote";
+    return {
+      output: `${verb} ${input.content.length} bytes to ${input.path}`,
+      display: diffBlock(input.path, before ?? "", input.content, before === undefined),
+    };
   },
 };
 
@@ -94,7 +104,10 @@ const edit: ToolSpec = {
     if (!res.ok) return { output: `${res.error} (${input.path})`, isError: true };
     await ctx.sandbox.writeFile(input.path, res.text);
     const suffix = input.replace_all ? ` (${res.count} occurrences)` : "";
-    return { output: `edited ${input.path}${suffix}` };
+    return {
+      output: `edited ${input.path}${suffix}`,
+      display: diffBlock(input.path, before, res.text),
+    };
   },
 };
 
@@ -134,7 +147,8 @@ const multiEdit: ToolSpec = {
     ctx: ToolContext,
   ) {
     if (!input.edits?.length) return { output: "no edits provided", isError: true };
-    let text = await ctx.sandbox.readFile(input.path);
+    const before = await ctx.sandbox.readFile(input.path);
+    let text = before;
     for (let i = 0; i < input.edits.length; i++) {
       const e = input.edits[i];
       const res = applyEdit(text, e.old_string, e.new_string, e.replace_all);
@@ -142,7 +156,10 @@ const multiEdit: ToolSpec = {
       text = res.text;
     }
     await ctx.sandbox.writeFile(input.path, text);
-    return { output: `applied ${input.edits.length} edits to ${input.path}` };
+    return {
+      output: `applied ${input.edits.length} edits to ${input.path}`,
+      display: diffBlock(input.path, before, text),
+    };
   },
 };
 
@@ -291,6 +308,82 @@ function applyEdit(
   }
   const out = replaceAll ? text.split(oldS).join(newS) : replaceFirst(text, oldS, newS);
   return { ok: true, text: out, count };
+}
+
+/** A path header + a unified line diff, for the UI's `display` channel. */
+function diffBlock(path: string, before: string, after: string, isNew = false): string {
+  const header = isNew ? `${path} (new file)` : path;
+  return `${header}\n${unifiedDiff(before, after)}`;
+}
+
+/** Line-level LCS diff rendered with limited context. UI-only — never the model. */
+function unifiedDiff(before: string, after: string, context = 3, maxLines = 80): string {
+  const a = before.length ? before.split("\n") : [];
+  const b = after.length ? after.split("\n") : [];
+  // Drop the trailing "" a final newline produces, else a normal file shows a
+  // spurious blank context line (or a bogus +/- line on a newline-only change).
+  if (a[a.length - 1] === "") a.pop();
+  if (b[b.length - 1] === "") b.pop();
+  if (a.length + b.length > 4_000) return `(diff too large: ${a.length} → ${b.length} lines)`;
+
+  const ops = diffOps(a, b);
+  if (!ops.some((o) => o.t !== " ")) return "(no textual change)";
+
+  // Keep changed lines plus `context` lines of surrounding context; collapse the rest.
+  const keep = new Array<boolean>(ops.length).fill(false);
+  ops.forEach((o, i) => {
+    if (o.t === " ") return;
+    for (let k = Math.max(0, i - context); k <= Math.min(ops.length - 1, i + context); k++) {
+      keep[k] = true;
+    }
+  });
+
+  const out: string[] = [];
+  let collapsed = false;
+  for (let i = 0; i < ops.length; i++) {
+    if (!keep[i]) {
+      if (!collapsed) out.push("…");
+      collapsed = true;
+      continue;
+    }
+    collapsed = false;
+    out.push(`${ops[i].t} ${ops[i].s}`);
+  }
+  if (out.length > maxLines) {
+    return out.slice(0, maxLines).join("\n") + `\n… (+${out.length - maxLines} more diff lines)`;
+  }
+  return out.join("\n");
+}
+
+/** Classic LCS backtrack into a ' '/'-'/'+' op list. */
+function diffOps(a: string[], b: string[]): Array<{ t: " " | "-" | "+"; s: string }> {
+  const n = a.length;
+  const m = b.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const ops: Array<{ t: " " | "-" | "+"; s: string }> = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      ops.push({ t: " ", s: a[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      ops.push({ t: "-", s: a[i] });
+      i++;
+    } else {
+      ops.push({ t: "+", s: b[j] });
+      j++;
+    }
+  }
+  while (i < n) ops.push({ t: "-", s: a[i++] });
+  while (j < m) ops.push({ t: "+", s: b[j++] });
+  return ops;
 }
 
 function countOccurrences(hay: string, needle: string): number {

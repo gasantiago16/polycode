@@ -55,6 +55,8 @@ export type PermissionClass = "safe" | "mutating" | "dangerous";
 export interface ToolRunResult {
   output: string;
   isError?: boolean;
+  /** Optional richer rendering for the UI only (e.g. a diff). NOT sent to the model. */
+  display?: string;
 }
 
 export interface ExecResult {

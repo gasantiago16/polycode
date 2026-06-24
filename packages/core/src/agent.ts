@@ -16,7 +16,7 @@ import { PermissionEngine } from "./permissions.js";
 export type AgentUIEvent =
   | CanonicalEvent
   | { type: "tool_executing"; call: ToolCallPart }
-  | { type: "tool_result"; result: ToolResultPart }
+  | { type: "tool_result"; result: ToolResultPart; display?: string }
   | { type: "tool_denied"; call: ToolCallPart; reason?: string }
   | { type: "turn_complete"; usage?: { inputTokens: number; outputTokens: number } };
 
@@ -152,8 +152,12 @@ export class Agent {
       if (textBuf) assistantContent.unshift({ type: "text", text: textBuf });
       this.messages.push({ role: "assistant", content: assistantContent });
 
+      // Settled turn → emit usage exactly once. The retry loop above has already
+      // collapsed any replayed `stop` events, so a UI can sum per-turn usage
+      // here without double-counting a retried turn.
+      yield { type: "turn_complete", usage };
+
       if (stop !== "tool_use" || pending.length === 0) {
-        yield { type: "turn_complete", usage };
         return;
       }
 
@@ -179,6 +183,7 @@ export class Agent {
         }
         const events: AgentUIEvent[] = [{ type: "tool_executing", call }];
         let result: ToolResultPart;
+        let display: string | undefined;
         try {
           const r = await tool.run(call.input, ctx);
           result = {
@@ -188,10 +193,11 @@ export class Agent {
             output: r.output,
             isError: r.isError,
           };
+          display = r.display; // UI-only; never enters `result`/model messages
         } catch (err) {
           result = errorResult(call, String(err));
         }
-        events.push({ type: "tool_result", result });
+        events.push({ type: "tool_result", result, display });
         return { events, result };
       };
 

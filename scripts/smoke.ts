@@ -37,7 +37,7 @@ async function main(): Promise<void> {
   console.log(`  caps: ${JSON.stringify(provider.capabilities())}\n`);
 
   const sandbox = await createSandbox({ kind: "local", root: process.cwd() });
-  const engine = new PermissionEngine("yolo", async () => true);
+  const engine = new PermissionEngine("yolo", async () => "once");
   const agent = new Agent(provider, tools, engine, {
     system: "You are a terminal coding agent. Use the `read` tool to inspect files before answering.",
     sandbox,

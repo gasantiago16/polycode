@@ -95,13 +95,24 @@ ignore-case / context grep, the uniqueness guard, atomic <code>multi_edit</code>
 plus a live <code>pnpm smoke xai:grok-4.3</code> round-trip. Note: ripgrep is not installed on the dev box,
 so the JS grep path is the live-tested one; the <code>rg</code> fast-path is typecheck-verified and engages
 automatically when <code>rg</code> is present.</p>
-<h2>Future work</h2>
-<h3>Phase 3 — TUI parity</h3>
+<h2>Phase 3 — TUI parity ✅ (2026-06-24)</h2>
+<p>Made the terminal UI feel like Claude Code rather than a raw event log.</p>
 <ul>
-<li>Edit results rendered as diffs (<code>+</code>/<code>-</code>); multi-line, expandable tool output.</li>
-<li>Sticky permissions — &quot;always allow this tool for the session&quot; — instead of re-prompting.</li>
-<li>Token + context-window meter in the status bar.</li>
+<li><strong>Edit/write diffs</strong> — <code>edit</code>, <code>multi_edit</code>, and <code>write</code> emit a colored unified diff (LCS
+with collapsed context) through a UI-only <code>display</code> channel on <code>ToolRunResult</code>. The diff is
+shown under <code>⎿</code> (green <code>+</code> / red <code>-</code> / dim context); the model-facing tool output stays terse,
+so diffs never bloat the context window.</li>
+<li><strong>Multi-line tool output</strong> — results render several indented lines with a <code>… +N lines</code> hint
+instead of a single truncated line.</li>
+<li><strong>Sticky permissions</strong> — the prompt is three-way: allow once (<code>y</code>), allow for the session
+(<code>a</code>), or deny (<code>n</code>). The engine remembers session grants and stops re-prompting for that tool.</li>
+<li><strong>Token / context meter</strong> — the status bar shows <code>ctx &lt;live&gt;/&lt;window&gt;</code> and a session token
+total, accumulated from each turn&#39;s usage and updated on model switch / route.</li>
+<li><strong>No-flicker rendering</strong> — finished turns are committed to an Ink <code>&lt;Static&gt;</code> region so they
+print once and never repaint; only the in-progress turn and the composer redraw during
+streaming. Tool-call headers read <code>Read(path)</code> instead of raw JSON.</li>
 </ul>
+<h2>Future work</h2>
 <h3>Phase 4 — Persistence &amp; observability</h3>
 <ul>
 <li>Session transcripts written to <code>.polycode/sessions/</code>, plus a <code>--resume</code> flag.</li>
@@ -134,8 +145,8 @@ automatically when <code>rg</code> is present.</p>
 </tr>
 <tr>
 <td>3</td>
-<td>TUI parity (diffs, sticky perms, token meter)</td>
-<td>planned</td>
+<td>TUI parity (diffs, sticky perms, token meter, no-flicker)</td>
+<td>✅ done (2026-06-24)</td>
 </tr>
 <tr>
 <td>4</td>
