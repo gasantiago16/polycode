@@ -1,4 +1,4 @@
-import type { ToolSpec, ToolContext } from "@polycode/core";
+import type { ToolSpec, ToolContext, ToolRunResult, Sandbox } from "@polycode/core";
 
 const MAX_OUTPUT = 60_000;
 
@@ -70,7 +70,8 @@ const write: ToolSpec = {
 
 const edit: ToolSpec = {
   name: "edit",
-  description: "Replace an exact string in a file. Errors if the string is absent.",
+  description:
+    "Replace an exact string in a file. Errors if old_string is absent or not unique (add surrounding context, or set replace_all to change every occurrence).",
   permission: "mutating",
   parallelSafe: false,
   parameters: {
@@ -79,7 +80,7 @@ const edit: ToolSpec = {
       path: { type: "string" },
       old_string: { type: "string" },
       new_string: { type: "string" },
-      replace_all: { type: "boolean" },
+      replace_all: { type: "boolean", description: "Replace every occurrence (default false)" },
     },
     required: ["path", "old_string", "new_string"],
     additionalProperties: false,
@@ -89,14 +90,59 @@ const edit: ToolSpec = {
     ctx: ToolContext,
   ) {
     const before = await ctx.sandbox.readFile(input.path);
-    if (!before.includes(input.old_string)) {
-      return { output: `old_string not found in ${input.path}`, isError: true };
+    const res = applyEdit(before, input.old_string, input.new_string, input.replace_all);
+    if (!res.ok) return { output: `${res.error} (${input.path})`, isError: true };
+    await ctx.sandbox.writeFile(input.path, res.text);
+    const suffix = input.replace_all ? ` (${res.count} occurrences)` : "";
+    return { output: `edited ${input.path}${suffix}` };
+  },
+};
+
+const multiEdit: ToolSpec = {
+  name: "multi_edit",
+  description:
+    "Apply a sequence of exact-string edits to ONE file atomically (all-or-nothing). Each edit follows the same uniqueness rules as `edit`; if any fails, nothing is written.",
+  permission: "mutating",
+  parallelSafe: false,
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string" },
+      edits: {
+        type: "array",
+        description: "Edits applied in order to the in-memory file before a single write.",
+        items: {
+          type: "object",
+          properties: {
+            old_string: { type: "string" },
+            new_string: { type: "string" },
+            replace_all: { type: "boolean" },
+          },
+          required: ["old_string", "new_string"],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["path", "edits"],
+    additionalProperties: false,
+  },
+  async run(
+    input: {
+      path: string;
+      edits: Array<{ old_string: string; new_string: string; replace_all?: boolean }>;
+    },
+    ctx: ToolContext,
+  ) {
+    if (!input.edits?.length) return { output: "no edits provided", isError: true };
+    let text = await ctx.sandbox.readFile(input.path);
+    for (let i = 0; i < input.edits.length; i++) {
+      const e = input.edits[i];
+      const res = applyEdit(text, e.old_string, e.new_string, e.replace_all);
+      if (!res.ok) return { output: `edit #${i + 1}: ${res.error} (${input.path})`, isError: true };
+      text = res.text;
     }
-    const after = input.replace_all
-      ? before.split(input.old_string).join(input.new_string)
-      : before.replace(input.old_string, input.new_string);
-    await ctx.sandbox.writeFile(input.path, after);
-    return { output: `edited ${input.path}` };
+    await ctx.sandbox.writeFile(input.path, text);
+    return { output: `applied ${input.edits.length} edits to ${input.path}` };
   },
 };
 
@@ -124,38 +170,70 @@ const bash: ToolSpec = {
   },
 };
 
+interface GrepInput {
+  pattern: string;
+  path?: string;
+  glob?: string;
+  ignore_case?: boolean;
+  context?: number;
+  max_results?: number;
+}
+
 const grep: ToolSpec = {
   name: "grep",
-  description: "Search file contents for a regex. Returns matching lines with paths.",
+  description:
+    "Search file contents for a regex. Uses ripgrep when available, else a JS scan. Match lines are 'file:line: text'; context lines are 'file-line- text'.",
   permission: "safe",
   parallelSafe: true,
   parameters: {
     type: "object",
     properties: {
-      pattern: { type: "string" },
-      path: { type: "string", description: "Path prefix to limit the search" },
+      pattern: { type: "string", description: "Regular expression to search for" },
+      path: { type: "string", description: "File or directory to limit the search to" },
+      glob: { type: "string", description: "Only search files matching this glob, e.g. **/*.ts" },
+      ignore_case: { type: "boolean", description: "Case-insensitive search" },
+      context: { type: "number", description: "Lines of context before & after each match" },
+      max_results: { type: "number", description: "Max matches to return (default 200)" },
     },
     required: ["pattern"],
     additionalProperties: false,
   },
-  async run(input: { pattern: string; path?: string }, ctx: ToolContext) {
-    const re = new RegExp(input.pattern);
-    const prefix = input.path ? input.path.replace(/^\.\/?/, "").replace(/\\/g, "/") : "";
-    const hits: string[] = [];
-    for await (const file of ctx.sandbox.walk()) {
-      if (prefix && !file.startsWith(prefix)) continue;
-      let text: string;
-      try {
-        text = await ctx.sandbox.readFile(file);
-      } catch {
-        continue; // binary / unreadable
-      }
-      text.split("\n").forEach((line, i) => {
-        if (re.test(line)) hits.push(`${file}:${i + 1}: ${line.trim()}`);
-      });
-      if (hits.length > 500) break;
+  async run(input: GrepInput, ctx: ToolContext) {
+    if (await hasRipgrep(ctx)) return runRipgrep(input, ctx);
+    return runJsGrep(input, ctx);
+  },
+};
+
+const ls: ToolSpec = {
+  name: "ls",
+  description:
+    "List files and directories directly under a path (project root if omitted). Ignores node_modules/.git/dist.",
+  permission: "safe",
+  parallelSafe: true,
+  parameters: {
+    type: "object",
+    properties: {
+      path: { type: "string", description: "Directory relative to project root (default '.')" },
+    },
+    required: [],
+    additionalProperties: false,
+  },
+  async run(input: { path?: string }, ctx: ToolContext) {
+    const prefix = normalizeDir(input.path);
+    const dirs = new Set<string>();
+    const files: string[] = [];
+    for await (const f of ctx.sandbox.walk()) {
+      if (prefix && !f.startsWith(prefix)) continue;
+      const rest = prefix ? f.slice(prefix.length) : f;
+      const slash = rest.indexOf("/");
+      if (slash === -1) files.push(rest);
+      else dirs.add(rest.slice(0, slash));
     }
-    return { output: clamp(hits.join("\n") || "(no matches)") };
+    if (!dirs.size && !files.length) {
+      return { output: `(empty or not found: ${input.path ?? "."})` };
+    }
+    const out = [...[...dirs].sort().map((d) => `${d}/`), ...files.sort()];
+    return { output: clamp(out.join("\n")) };
   },
 };
 
@@ -181,14 +259,190 @@ const glob: ToolSpec = {
   },
 };
 
-function globToRegExp(pattern: string): RegExp {
-  const escaped = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*\*/g, " ")
-    .replace(/\*/g, "[^/]*")
-    .replace(/ /g, ".*");
-  return new RegExp(`^${escaped}$`);
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+interface EditOk {
+  ok: true;
+  text: string;
+  count: number;
+}
+interface EditErr {
+  ok: false;
+  error: string;
 }
 
-export const tools: ToolSpec[] = [read, write, edit, bash, grep, glob];
-export { read, write, edit, bash, grep, glob };
+/** Shared edit logic with a uniqueness guard, used by `edit` and `multi_edit`. */
+function applyEdit(
+  text: string,
+  oldS: string,
+  newS: string,
+  replaceAll?: boolean,
+): EditOk | EditErr {
+  if (oldS === newS) return { ok: false, error: "old_string and new_string are identical" };
+  const count = countOccurrences(text, oldS);
+  if (count === 0) return { ok: false, error: "old_string not found" };
+  if (count > 1 && !replaceAll) {
+    return {
+      ok: false,
+      error: `old_string is not unique (${count} matches) — add surrounding context or set replace_all`,
+    };
+  }
+  const out = replaceAll ? text.split(oldS).join(newS) : replaceFirst(text, oldS, newS);
+  return { ok: true, text: out, count };
+}
+
+function countOccurrences(hay: string, needle: string): number {
+  if (!needle) return 0;
+  let n = 0;
+  let i = hay.indexOf(needle);
+  while (i !== -1) {
+    n++;
+    i = hay.indexOf(needle, i + needle.length);
+  }
+  return n;
+}
+
+/** Literal first-occurrence replace (avoids String.replace's `$` substitutions). */
+function replaceFirst(text: string, oldS: string, newS: string): string {
+  const i = text.indexOf(oldS);
+  return i === -1 ? text : text.slice(0, i) + newS + text.slice(i + oldS.length);
+}
+
+function normalizePrefix(p?: string): string {
+  if (!p) return "";
+  return p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+}
+
+function normalizeDir(p?: string): string {
+  if (!p || p === "." || p === "./") return "";
+  const s = p
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "")
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
+  return s ? s + "/" : "";
+}
+
+// Probe ripgrep once per sandbox (the model calls grep constantly, often in
+// parallel batches — re-probing every call would spawn N extra processes).
+const rgProbe = new WeakMap<Sandbox, Promise<boolean>>();
+
+async function hasRipgrep(ctx: ToolContext): Promise<boolean> {
+  let probe = rgProbe.get(ctx.sandbox);
+  if (!probe) {
+    probe = (async () => {
+      try {
+        const r = await ctx.sandbox.execFile("rg", ["--version"], { timeoutMs: 5_000 });
+        return r.code === 0 && /ripgrep/i.test(r.stdout);
+      } catch {
+        return false;
+      }
+    })();
+    rgProbe.set(ctx.sandbox, probe);
+  }
+  return probe;
+}
+
+async function runRipgrep(input: GrepInput, ctx: ToolContext): Promise<ToolRunResult> {
+  const cap = Math.max(1, Math.floor(input.max_results ?? 200));
+  const ctxN = input.context && input.context > 0 ? Math.floor(input.context) : 0;
+
+  // Built as an explicit argv (no shell): nothing here is shell-parsed, so a
+  // model-supplied pattern/glob/path can't inject a command.
+  const args = ["--line-number", "--no-heading", "--color", "never", "--max-count", String(cap)];
+  if (input.ignore_case) args.push("-i");
+  if (ctxN > 0) args.push("-C", String(ctxN));
+  if (input.glob) args.push("-g", input.glob);
+  args.push("-e", input.pattern);
+  // `--` ends options so a path beginning with `-` can't be read as a flag
+  // (rg has flags like --pre that execute programs).
+  if (input.path) args.push("--", input.path);
+
+  const r = await ctx.sandbox.execFile("rg", args, { signal: ctx.signal });
+  // rg exit codes: 0 = matches, 1 = no matches, 2 = error.
+  if (r.code !== 0 && r.code !== 1) {
+    return { output: clamp((r.stderr || r.stdout).trim() || "grep failed"), isError: true };
+  }
+  let text = r.stdout.replace(/\s+$/, "");
+  // --max-count caps per-file; also bound the total output (context inflates it).
+  const lineBudget = cap * (1 + 2 * ctxN) + cap;
+  const lines = text ? text.split("\n") : [];
+  if (lines.length > lineBudget) {
+    text = lines.slice(0, lineBudget).join("\n") + `\n…[output truncated]`;
+  }
+  return { output: clamp(text || "(no matches)") };
+}
+
+async function runJsGrep(input: GrepInput, ctx: ToolContext): Promise<ToolRunResult> {
+  let re: RegExp;
+  try {
+    re = new RegExp(input.pattern, input.ignore_case ? "i" : "");
+  } catch (e) {
+    return { output: `invalid regex: ${String(e)}`, isError: true };
+  }
+  const prefix = normalizePrefix(input.path);
+  const globRe = input.glob ? globToRegExp(input.glob) : null;
+  const ctxN = Math.max(0, Math.floor(input.context ?? 0));
+  const cap = Math.max(1, Math.floor(input.max_results ?? 200));
+  const out: string[] = [];
+  let matches = 0;
+
+  outer: for await (const file of ctx.sandbox.walk()) {
+    if (prefix && !file.startsWith(prefix)) continue;
+    if (globRe && !globRe.test(file)) continue;
+    let text: string;
+    try {
+      text = await ctx.sandbox.readFile(file);
+    } catch {
+      continue; // binary / unreadable
+    }
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (!re.test(lines[i])) continue;
+      if (ctxN > 0 && out.length) out.push("--");
+      const start = Math.max(0, i - ctxN);
+      const end = Math.min(lines.length - 1, i + ctxN);
+      for (let j = start; j <= end; j++) {
+        const sep = j === i ? ":" : "-";
+        out.push(`${file}${sep}${j + 1}${sep} ${lines[j].trim()}`);
+      }
+      if (++matches >= cap) {
+        out.push(`…[truncated at ${cap} matches]`);
+        break outer;
+      }
+    }
+  }
+  return { output: clamp(out.join("\n") || "(no matches)") };
+}
+
+function globToRegExp(pattern: string): RegExp {
+  let re = "";
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === "*") {
+      if (pattern[i + 1] === "*") {
+        i++;
+        if (pattern[i + 1] === "/") {
+          i++;
+          re += "(?:.*/)?"; // **/ matches zero or more leading path segments
+        } else {
+          re += ".*"; // ** matches across separators
+        }
+      } else {
+        re += "[^/]*"; // * matches within a single segment
+      }
+    } else if (c === "?") {
+      re += "[^/]";
+    } else if (/[.+^${}()|[\]\\]/.test(c)) {
+      re += "\\" + c;
+    } else {
+      re += c;
+    }
+  }
+  return new RegExp(`^${re}$`);
+}
+
+export const tools: ToolSpec[] = [read, write, edit, multiEdit, bash, grep, ls, glob];
+export { read, write, edit, multiEdit, bash, grep, ls, glob };

@@ -74,6 +74,24 @@ export class LocalSandbox implements Sandbox {
     }
   }
 
+  async execFile(file: string, args: string[], opts?: ExecOptions): Promise<ExecResult> {
+    try {
+      const { stdout, stderr } = await pexecFile(file, args, {
+        cwd: this.rootDir,
+        timeout: opts?.timeoutMs ?? 120_000,
+        signal: opts?.signal,
+        maxBuffer: MAX_BUFFER,
+      });
+      return { stdout, stderr, code: 0 };
+    } catch (e: any) {
+      return {
+        stdout: e?.stdout ?? "",
+        stderr: [e?.stderr, e?.message].filter(Boolean).join("\n"),
+        code: typeof e?.code === "number" ? e.code : 1,
+      };
+    }
+  }
+
   async *walk(): AsyncIterable<string> {
     yield* walkDir(this.rootDir, this.rootDir);
   }
@@ -150,6 +168,24 @@ export class DockerSandbox implements Sandbox {
       const { stdout, stderr } = await pexecFile(
         "docker",
         ["exec", this.containerId, "sh", "-lc", command],
+        { timeout: opts?.timeoutMs ?? 120_000, signal: opts?.signal, maxBuffer: MAX_BUFFER },
+      );
+      return { stdout, stderr, code: 0 };
+    } catch (e: any) {
+      return {
+        stdout: e?.stdout ?? "",
+        stderr: [e?.stderr, e?.message].filter(Boolean).join("\n"),
+        code: typeof e?.code === "number" ? e.code : 1,
+      };
+    }
+  }
+
+  async execFile(file: string, args: string[], opts?: ExecOptions): Promise<ExecResult> {
+    try {
+      // No `sh -c`: args go straight to the program inside the container.
+      const { stdout, stderr } = await pexecFile(
+        "docker",
+        ["exec", this.containerId, file, ...args],
         { timeout: opts?.timeoutMs ?? 120_000, signal: opts?.signal, maxBuffer: MAX_BUFFER },
       );
       return { stdout, stderr, code: 0 };
