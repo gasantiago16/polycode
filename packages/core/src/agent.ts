@@ -157,41 +157,63 @@ export class Agent {
         return;
       }
 
-      // Permission-gate + execute. Sequential for now so permission prompts
-      // never overlap; parallelSafe tools can later be batched with Promise.all.
+      // Permission-gate + execute. Consecutive parallel-safe (read-only) tools
+      // run concurrently — they're "safe" class, so they never prompt and can't
+      // overlap permission dialogs; everything else runs sequentially. Results
+      // are appended in call order regardless, so the model sees them in order.
       const ctx: ToolContext = { sandbox: this.opts.sandbox, signal };
       const results: ToolResultPart[] = [];
 
-      for (const call of pending) {
+      const execOne = async (
+        call: ToolCallPart,
+      ): Promise<{ events: AgentUIEvent[]; result: ToolResultPart }> => {
         const tool = toolMap.get(call.name);
         if (!tool) {
-          results.push(errorResult(call, `unknown tool: ${call.name}`));
-          continue;
+          const result = errorResult(call, `unknown tool: ${call.name}`);
+          return { events: [{ type: "tool_result", result }], result };
         }
-
         const decision = await this.permissions.check(tool, call.input);
         if (!decision.allow) {
-          yield { type: "tool_denied", call, reason: decision.reason };
-          results.push(errorResult(call, `Denied: ${decision.reason ?? "permission"}`));
-          continue;
+          const result = errorResult(call, `Denied: ${decision.reason ?? "permission"}`);
+          return { events: [{ type: "tool_denied", call, reason: decision.reason }], result };
         }
-
-        yield { type: "tool_executing", call };
+        const events: AgentUIEvent[] = [{ type: "tool_executing", call }];
+        let result: ToolResultPart;
         try {
           const r = await tool.run(call.input, ctx);
-          const res: ToolResultPart = {
+          result = {
             type: "tool_result",
             id: call.id,
             name: call.name,
             output: r.output,
             isError: r.isError,
           };
-          results.push(res);
-          yield { type: "tool_result", result: res };
         } catch (err) {
-          const res = errorResult(call, String(err));
-          results.push(res);
-          yield { type: "tool_result", result: res };
+          result = errorResult(call, String(err));
+        }
+        events.push({ type: "tool_result", result });
+        return { events, result };
+      };
+
+      let idx = 0;
+      while (idx < pending.length) {
+        // Gather a run of consecutive parallel-safe calls.
+        const batch: ToolCallPart[] = [];
+        while (idx < pending.length && toolMap.get(pending[idx].name)?.parallelSafe) {
+          batch.push(pending[idx++]);
+        }
+
+        if (batch.length > 1) {
+          const outcomes = await Promise.all(batch.map(execOne));
+          for (const o of outcomes) {
+            for (const ev of o.events) yield ev;
+            results.push(o.result);
+          }
+        } else {
+          const call = batch.length === 1 ? batch[0] : pending[idx++];
+          const { events, result } = await execOne(call);
+          for (const ev of events) yield ev;
+          results.push(result);
         }
       }
 

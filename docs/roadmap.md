@@ -28,15 +28,33 @@ awareness and a resilient loop.
 Verification: `pnpm typecheck` clean; live `pnpm smoke xai:grok-4.3` round-trip green
 (tool call → numbered result → text).
 
+## Phase 2 — Tools parity ✅ (2026-06-24)
+
+The tools were capable-but-thin; Phase 2 brought them to Claude-Code standard.
+
+- **`grep`** — ripgrep fast-path (auto-detected, cross-shell argument quoting) with a much
+  stronger JS-walk fallback supporting `ignore_case`, a `glob` filter, `context` lines, and
+  `max_results`. When `rg` is not on PATH the JS path runs transparently.
+- **`edit` uniqueness guard** — errors with a match count when `old_string` is not unique
+  (unless `replace_all`), so an ambiguous edit can't silently hit the wrong spot. A latent
+  `$`-substitution bug in single-replace was fixed by switching to a literal replace.
+- **`multi_edit`** (new) — applies a sequence of edits to one file **atomically**; if any edit
+  fails, nothing is written.
+- **`ls`** (new) — lists files and directories directly under a path.
+- **Glob fix** — `**/*.ts` previously required a path separator, so top-level files never
+  matched; the matcher was rewritten with a proper `**/` globstar and `?` support (benefits both
+  `grep --glob` and the `glob` tool).
+- **Parallel execution** (`packages/core/src/agent.ts`) — consecutive read-only (safe) tool
+  calls now run concurrently via `Promise.all`, with results kept in call order; mutating and
+  dangerous tools still run sequentially so permission prompts never overlap.
+
+Verification: `pnpm typecheck` clean; behavior covered by a throwaway harness (glob /
+ignore-case / context grep, the uniqueness guard, atomic `multi_edit`, `ls`, parallel timing)
+plus a live `pnpm smoke xai:grok-4.3` round-trip. Note: ripgrep is not installed on the dev box,
+so the JS grep path is the live-tested one; the `rg` fast-path is typecheck-verified and engages
+automatically when `rg` is present.
+
 ## Future work
-
-### Phase 2 — Tools parity
-
-- ripgrep-backed `grep` (case-insensitive, glob/type filters, context lines) with a graceful
-  JS-walk fallback when `rg` is not on PATH.
-- `edit` uniqueness guard — error when `old_string` is ambiguous unless `replace_all` — plus a
-  multi-edit / batch variant.
-- An `ls` tool (list a directory), and concurrent execution of `parallelSafe` read-only tools.
 
 ### Phase 3 — TUI parity
 
@@ -60,6 +78,6 @@ Verification: `pnpm typecheck` clean; live `pnpm smoke xai:grok-4.3` round-trip 
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Project context · loop hardening · numbered `read` | ✅ done (2026-06-23) |
-| 2 | Tools parity (grep/edit/ls/parallel) | planned |
+| 2 | Tools parity (grep/edit/ls/parallel) | ✅ done (2026-06-24) |
 | 3 | TUI parity (diffs, sticky perms, token meter) | planned |
 | 4 | Persistence & logs (transcripts, `--resume`) | planned |

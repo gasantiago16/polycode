@@ -70,15 +70,31 @@ text and tool calls are never duplicated. User interrupts (<code>esc</code>) sti
 </ul>
 <p>Verification: <code>pnpm typecheck</code> clean; live <code>pnpm smoke xai:grok-4.3</code> round-trip green
 (tool call → numbered result → text).</p>
-<h2>Future work</h2>
-<h3>Phase 2 — Tools parity</h3>
+<h2>Phase 2 — Tools parity ✅ (2026-06-24)</h2>
+<p>The tools were capable-but-thin; Phase 2 brought them to Claude-Code standard.</p>
 <ul>
-<li>ripgrep-backed <code>grep</code> (case-insensitive, glob/type filters, context lines) with a graceful
-JS-walk fallback when <code>rg</code> is not on PATH.</li>
-<li><code>edit</code> uniqueness guard — error when <code>old_string</code> is ambiguous unless <code>replace_all</code> — plus a
-multi-edit / batch variant.</li>
-<li>An <code>ls</code> tool (list a directory), and concurrent execution of <code>parallelSafe</code> read-only tools.</li>
+<li><strong><code>grep</code></strong> — ripgrep fast-path (auto-detected, cross-shell argument quoting) with a much
+stronger JS-walk fallback supporting <code>ignore_case</code>, a <code>glob</code> filter, <code>context</code> lines, and
+<code>max_results</code>. When <code>rg</code> is not on PATH the JS path runs transparently.</li>
+<li><strong><code>edit</code> uniqueness guard</strong> — errors with a match count when <code>old_string</code> is not unique
+(unless <code>replace_all</code>), so an ambiguous edit can&#39;t silently hit the wrong spot. A latent
+<code>$</code>-substitution bug in single-replace was fixed by switching to a literal replace.</li>
+<li><strong><code>multi_edit</code></strong> (new) — applies a sequence of edits to one file <strong>atomically</strong>; if any edit
+fails, nothing is written.</li>
+<li><strong><code>ls</code></strong> (new) — lists files and directories directly under a path.</li>
+<li><strong>Glob fix</strong> — <code>**/*.ts</code> previously required a path separator, so top-level files never
+matched; the matcher was rewritten with a proper <code>**/</code> globstar and <code>?</code> support (benefits both
+<code>grep --glob</code> and the <code>glob</code> tool).</li>
+<li><strong>Parallel execution</strong> (<code>packages/core/src/agent.ts</code>) — consecutive read-only (safe) tool
+calls now run concurrently via <code>Promise.all</code>, with results kept in call order; mutating and
+dangerous tools still run sequentially so permission prompts never overlap.</li>
 </ul>
+<p>Verification: <code>pnpm typecheck</code> clean; behavior covered by a throwaway harness (glob /
+ignore-case / context grep, the uniqueness guard, atomic <code>multi_edit</code>, <code>ls</code>, parallel timing)
+plus a live <code>pnpm smoke xai:grok-4.3</code> round-trip. Note: ripgrep is not installed on the dev box,
+so the JS grep path is the live-tested one; the <code>rg</code> fast-path is typecheck-verified and engages
+automatically when <code>rg</code> is present.</p>
+<h2>Future work</h2>
 <h3>Phase 3 — TUI parity</h3>
 <ul>
 <li>Edit results rendered as diffs (<code>+</code>/<code>-</code>); multi-line, expandable tool output.</li>
@@ -113,7 +129,7 @@ multi-edit / batch variant.</li>
 <tr>
 <td>2</td>
 <td>Tools parity (grep/edit/ls/parallel)</td>
-<td>planned</td>
+<td>✅ done (2026-06-24)</td>
 </tr>
 <tr>
 <td>3</td>
