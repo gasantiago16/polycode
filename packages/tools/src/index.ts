@@ -320,6 +320,10 @@ function diffBlock(path: string, before: string, after: string, isNew = false): 
 function unifiedDiff(before: string, after: string, context = 3, maxLines = 80): string {
   const a = before.length ? before.split("\n") : [];
   const b = after.length ? after.split("\n") : [];
+  // Drop the trailing "" a final newline produces, else a normal file shows a
+  // spurious blank context line (or a bogus +/- line on a newline-only change).
+  if (a[a.length - 1] === "") a.pop();
+  if (b[b.length - 1] === "") b.pop();
   if (a.length + b.length > 4_000) return `(diff too large: ${a.length} → ${b.length} lines)`;
 
   const ops = diffOps(a, b);

@@ -74,9 +74,10 @@ export function Root(props: RootProps) {
       cwd={props.cwd}
       system={props.system}
       onModelSwitch={props.onModelSwitch}
-      onOpenSettings={() => setMode("settings")}
       route={props.route}
       autoRoute={props.autoRoute}
+      validate={props.validate}
+      onAgentic={props.onAgentic}
     />
   );
 }

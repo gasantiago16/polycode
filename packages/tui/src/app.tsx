@@ -11,7 +11,9 @@ import {
   type Sandbox,
   type ToolSpec,
 } from "@polycode/core";
+import { hydrateEnv, type ProviderId } from "@polycode/secrets";
 import { Banner } from "./banner.js";
+import { Settings } from "./settings.js";
 import { Markdown } from "./markdown.js";
 import { theme, sym, WORK_VERBS } from "./theme.js";
 
@@ -45,9 +47,12 @@ export interface AppProps {
   cwd: string;
   system?: string;
   onModelSwitch?: (arg: string) => Provider;
-  onOpenSettings?: () => void;
   route?: (text: string) => Promise<{ provider: Provider; tier: string; label: string }>;
   autoRoute?: boolean;
+  /** Validate a provider's stored key (for the in-session settings overlay). */
+  validate?: (p: ProviderId) => Promise<boolean>;
+  /** Agentic key-provisioning hook (for the in-session settings overlay). */
+  onAgentic?: (p: ProviderId) => Promise<string> | string;
 }
 
 interface PendingPerm {
@@ -63,9 +68,10 @@ export function App({
   cwd,
   system,
   onModelSwitch,
-  onOpenSettings,
   route,
   autoRoute: autoRouteDefault,
+  validate,
+  onAgentic,
 }: AppProps) {
   const { exit } = useApp();
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -81,6 +87,7 @@ export function App({
   const [elapsed, setElapsed] = useState(0);
   const [verb, setVerb] = useState<string>(WORK_VERBS[0]);
   const [perm, setPerm] = useState<PendingPerm | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [modelLabel, setModelLabel] = useState(`${provider.id}:${provider.model}`);
   const [mode, setMode] = useState<PermissionMode>("ask");
   const [autoRoute, setAutoRoute] = useState(!!autoRouteDefault && !!route);
@@ -170,7 +177,10 @@ export function App({
           case "tool_denied":
             setToolDenied(ev.call.id, ev.reason);
             break;
-          case "turn_complete":
+          case "stop":
+            // run() makes one `stop` per model turn (several per request, one
+            // per tool round-trip). Sum them all for the session total; the last
+            // turn's input tokens act as the live-context gauge.
             if (ev.usage) {
               setCtxTokens(ev.usage.inputTokens);
               setSessionTok((s) => ({
@@ -203,6 +213,7 @@ export function App({
     const v = raw.trim();
     setInput("");
     if (!v) return;
+    if (busy) return; // a turn is streaming — ignore concurrent submits (esc to interrupt)
 
     if (v === "/exit" || v === "/quit") return exit();
     if (v === "/help") {
@@ -213,13 +224,14 @@ export function App({
       return;
     }
     if (v === "/settings" || v === "/login") {
-      if (onOpenSettings) return onOpenSettings();
-      return add({ kind: "error", text: "settings unavailable" });
+      setShowSettings(true); // overlay — App stays mounted, history is preserved
+      return;
     }
     if (v === "/clear") {
       entriesRef.current = [];
       setEntries([]);
       setCommitted(0);
+      process.stdout.write("\x1b[2J\x1b[3J\x1b[H"); // also clear the committed scrollback
       return;
     }
     if (v === "/keys") {
@@ -287,7 +299,7 @@ export function App({
       <Static items={staticRows}>
         {(row, i) =>
           row.kind === "banner" ? (
-            <Banner key="banner" cwd={cwd} model={modelLabel} />
+            <Banner key="banner" cwd={cwd} />
           ) : (
             <EntryView key={i} entry={row.entry} />
           )
@@ -299,7 +311,16 @@ export function App({
         <EntryView key={committed + i} entry={e} />
       ))}
 
-      {perm ? (
+      {showSettings ? (
+        <Settings
+          validate={validate}
+          onAgentic={onAgentic}
+          onDone={() => {
+            hydrateEnv();
+            setShowSettings(false);
+          }}
+        />
+      ) : perm ? (
         <Box
           flexDirection="column"
           borderStyle="round"
@@ -469,22 +490,27 @@ function DiffView({ display }: { display: string }) {
 function formatToolCall(name: string, input: unknown): string {
   const a = (input ?? {}) as Record<string, unknown>;
   const s = (k: string) => (typeof a[k] === "string" ? (a[k] as string) : "");
+  let primary = "";
   switch (name) {
     case "read":
     case "write":
     case "edit":
     case "multi_edit":
     case "ls":
-      return s("path");
+      primary = s("path");
+      break;
     case "grep":
-      return [s("pattern"), a.glob ? `glob=${String(a.glob)}` : ""].filter(Boolean).join(" ");
+      primary = [s("pattern"), a.glob ? `glob=${String(a.glob)}` : ""].filter(Boolean).join(" ");
+      break;
     case "glob":
-      return s("pattern");
+      primary = s("pattern");
+      break;
     case "bash":
-      return s("command");
-    default:
-      return compact(input);
+      primary = s("command");
+      break;
   }
+  // Fall back to raw input so a malformed/dangerous call is never shown blank.
+  return primary || compact(input);
 }
 
 function cap(s: string): string {
