@@ -27,6 +27,8 @@ export interface AgentOptions {
   maxSteps?: number;
   /** Retries for transient provider errors that hit before any output (default 2). */
   maxRetries?: number;
+  /** Seed the conversation (e.g. resuming a saved session). */
+  initialMessages?: CanonicalMessage[];
 }
 
 /**
@@ -38,14 +40,18 @@ export interface AgentOptions {
  * and (later) parallel scheduling all stay under our control.
  */
 export class Agent {
-  private messages: CanonicalMessage[] = [];
+  private messages: CanonicalMessage[];
 
   constructor(
     private provider: Provider,
     private tools: ToolSpec[],
     private permissions: PermissionEngine,
     private opts: AgentOptions,
-  ) {}
+  ) {
+    // Deep-copy: the seed is owned by the caller (e.g. a loaded session); a
+    // shallow copy would share content objects and risk cross-mutation.
+    this.messages = opts.initialMessages ? structuredClone(opts.initialMessages) : [];
+  }
 
   /** Runtime model switching (/model) swaps the provider without losing history. */
   setProvider(provider: Provider): void {

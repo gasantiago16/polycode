@@ -3,7 +3,7 @@ import { Text } from "ink";
 import { App } from "./app.js";
 import { Settings } from "./settings.js";
 import { configured, hydrateEnv, type ProviderId } from "@polycode/secrets";
-import type { Provider, Sandbox, ToolSpec } from "@polycode/core";
+import type { CanonicalMessage, Provider, Sandbox, ToolSpec } from "@polycode/core";
 
 export interface Spec {
   provider: string;
@@ -25,6 +25,10 @@ export interface RootProps {
   validate?: (p: ProviderId) => Promise<boolean>;
   /** Agentic key-provisioning hook (MCP/tool). */
   onAgentic?: (p: ProviderId) => Promise<string> | string;
+  /** Prior conversation to resume. */
+  initialMessages?: CanonicalMessage[];
+  /** Persist the conversation after each turn (session transcript). */
+  onPersist?: (messages: CanonicalMessage[], model: string) => void;
 }
 
 /** Orchestrates first-run / on-demand settings vs. the main app. */
@@ -78,6 +82,8 @@ export function Root(props: RootProps) {
       autoRoute={props.autoRoute}
       validate={props.validate}
       onAgentic={props.onAgentic}
+      initialMessages={props.initialMessages}
+      onPersist={props.onPersist}
     />
   );
 }

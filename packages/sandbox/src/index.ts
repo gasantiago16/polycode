@@ -43,6 +43,11 @@ export class LocalSandbox implements Sandbox {
     if (r.startsWith("..") || r.split(sep).includes("..")) {
       throw new Error(`path escapes project root: ${rel}`);
     }
+    // polycode's own metadata (session transcripts etc.) is off-limits to tools,
+    // so the agent can't read prior-session content back into the model.
+    if (r === ".polycode" || r.startsWith(".polycode" + sep)) {
+      throw new Error(`path is not accessible: ${rel}`);
+    }
     return abs;
   }
 

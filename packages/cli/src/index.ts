@@ -2,13 +2,14 @@ import { parseArgs } from "node:util";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { gatherContext, type GenerateRequest } from "@polycode/core";
+import { gatherContext, type CanonicalMessage, type GenerateRequest } from "@polycode/core";
 import { makeProvider, parseModelArg, type ProviderSpec } from "@polycode/providers";
 import { Router, type RouterConfig, type RoutingStrategy, type Tier } from "@polycode/router";
 import { createSandbox, type SandboxConfig, type SandboxKind } from "@polycode/sandbox";
 import { hydrateEnv, getKey, ENV_VAR, type ProviderId } from "@polycode/secrets";
 import { tools } from "@polycode/tools";
 import { startTui, type Spec } from "@polycode/tui";
+import { SessionStore, deriveTitle } from "./session.js";
 
 type AppConfig = RouterConfig & { sandbox?: SandboxConfig };
 
@@ -48,6 +49,9 @@ async function main(): Promise<void> {
       sandbox: { type: "string" }, // local | docker (overrides config)
       serve: { type: "boolean" },
       port: { type: "string" },
+      continue: { type: "boolean" }, // resume the most recent session in this project
+      resume: { type: "string" }, // resume a specific session id
+      sessions: { type: "boolean" }, // list saved sessions and exit
     },
     allowPositionals: true,
   });
@@ -60,6 +64,16 @@ async function main(): Promise<void> {
     cfg.routing = { ...cfg.routing, strategy: values.routing as RoutingStrategy };
   }
   const cwd = process.cwd();
+  const store = new SessionStore(cwd);
+
+  // `--sessions`: list saved transcripts for this project and exit.
+  if (values.sessions) {
+    const metas = store.list();
+    if (!metas.length) console.log("no sessions in this project");
+    else for (const m of metas) console.log(`${m.id}  ${m.model.padEnd(22)}  ${m.title}`);
+    return;
+  }
+
   const sandbox = await buildSandbox(cfg, values.sandbox as SandboxKind | undefined, cwd);
 
   if (values.serve) {
@@ -77,6 +91,42 @@ async function main(): Promise<void> {
   } catch {
     /* fall back to the base system prompt */
   }
+
+  // Session transcript: resume a prior conversation (--continue / --resume) or
+  // start a fresh one, and persist after every turn.
+  let initialMessages: CanonicalMessage[] | undefined;
+  let sessionId: string | undefined;
+  let createdAt: string | undefined;
+  if (values.continue || values.resume) {
+    const data = values.resume ? store.load(values.resume) : store.latest();
+    if (data) {
+      initialMessages = data.messages;
+      sessionId = data.id;
+      createdAt = data.createdAt;
+    } else if (values.resume) {
+      console.error(`no session "${values.resume}" in this project — starting fresh`);
+    } else {
+      console.error("no prior session to continue — starting fresh");
+    }
+  }
+  const now = new Date();
+  sessionId ??= store.newId(now);
+  createdAt ??= now.toISOString();
+  const onPersist = (messages: CanonicalMessage[], model: string) => {
+    try {
+      store.save({
+        id: sessionId!,
+        createdAt: createdAt!,
+        updatedAt: new Date().toISOString(),
+        cwd,
+        model,
+        title: deriveTitle(messages),
+        messages,
+      });
+    } catch {
+      /* best-effort: never crash a turn over persistence */
+    }
+  };
 
   // Optional forced starting model: --model wins, else --tier, else Root auto-picks.
   const forced: Spec | undefined = values.model
@@ -106,6 +156,8 @@ async function main(): Promise<void> {
     validate: (p) => validateKey(cfg, p),
     onAgentic: (p) =>
       `agentic provisioning for ${p} is not wired yet — coming soon (MCP/tool flow). Use paste / import-env / open-page for now.`,
+    initialMessages,
+    onPersist,
   });
 }
 
