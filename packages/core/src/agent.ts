@@ -152,8 +152,12 @@ export class Agent {
       if (textBuf) assistantContent.unshift({ type: "text", text: textBuf });
       this.messages.push({ role: "assistant", content: assistantContent });
 
+      // Settled turn → emit usage exactly once. The retry loop above has already
+      // collapsed any replayed `stop` events, so a UI can sum per-turn usage
+      // here without double-counting a retried turn.
+      yield { type: "turn_complete", usage };
+
       if (stop !== "tool_use" || pending.length === 0) {
-        yield { type: "turn_complete", usage };
         return;
       }
 

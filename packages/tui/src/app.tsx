@@ -177,9 +177,9 @@ export function App({
           case "tool_denied":
             setToolDenied(ev.call.id, ev.reason);
             break;
-          case "stop":
-            // run() makes one `stop` per model turn (several per request, one
-            // per tool round-trip). Sum them all for the session total; the last
+          case "turn_complete":
+            // One event per settled model turn (the agent collapses retries), so
+            // summing here is correct even across tool round-trips; the last
             // turn's input tokens act as the live-context gauge.
             if (ev.usage) {
               setCtxTokens(ev.usage.inputTokens);
@@ -213,9 +213,8 @@ export function App({
     const v = raw.trim();
     setInput("");
     if (!v) return;
-    if (busy) return; // a turn is streaming — ignore concurrent submits (esc to interrupt)
-
-    if (v === "/exit" || v === "/quit") return exit();
+    if (v === "/exit" || v === "/quit") return exit(); // always allowed
+    if (busy) return; // a turn is streaming — ignore other submits (esc to interrupt)
     if (v === "/help") {
       add({
         kind: "system",
@@ -228,10 +227,11 @@ export function App({
       return;
     }
     if (v === "/clear") {
+      // Resets the conversation + context. Scrollback above stays — it was
+      // already flushed to <Static>, and a raw ANSI clear desyncs Ink's buffer.
       entriesRef.current = [];
       setEntries([]);
       setCommitted(0);
-      process.stdout.write("\x1b[2J\x1b[3J\x1b[H"); // also clear the committed scrollback
       return;
     }
     if (v === "/keys") {
@@ -318,6 +318,10 @@ export function App({
           onDone={() => {
             hydrateEnv();
             setShowSettings(false);
+            add({
+              kind: "system",
+              text: "settings saved · run /model to apply a changed key to the active provider",
+            });
           }}
         />
       ) : perm ? (
