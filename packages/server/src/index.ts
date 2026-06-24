@@ -35,7 +35,7 @@ export function startServer({ cfg, port, sandbox }: ServerOptions): void {
       const { tier, provider } = await router.route(message);
       sse(res, "meta", { tier, model: `${provider.id}:${provider.model}`, routing: router.strategy });
 
-      const engine = new PermissionEngine("yolo", async () => true);
+      const engine = new PermissionEngine("yolo", async () => "once");
       const agent = new Agent(provider, tools, engine, { system: cfg.system, sandbox });
       agent.pushUser(message);
 

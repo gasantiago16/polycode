@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Box, Text, useApp, useInput } from "ink";
+import { Box, Static, Text, useApp, useInput } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import {
   Agent,
   PermissionEngine,
   type PermissionMode,
+  type PermissionChoice,
   type Provider,
   type Sandbox,
   type ToolSpec,
@@ -14,12 +15,28 @@ import { Banner } from "./banner.js";
 import { Markdown } from "./markdown.js";
 import { theme, sym, WORK_VERBS } from "./theme.js";
 
+const MAX_RESULT_LINES = 8; // plain tool output shown before "+N lines"
+const MAX_DIFF_LINES = 22; // diff lines shown before "+N lines"
+const ARG_WIDTH = 72; // tool-call argument display width
+
 type Entry =
   | { kind: "user"; text: string }
   | { kind: "assistant"; text: string }
-  | { kind: "tool"; id: string; name: string; input: unknown; result?: string; isError?: boolean; denied?: boolean; reason?: string }
+  | {
+      kind: "tool";
+      id: string;
+      name: string;
+      input: unknown;
+      result?: string;
+      isError?: boolean;
+      display?: string;
+      denied?: boolean;
+      reason?: string;
+    }
   | { kind: "system"; text: string }
   | { kind: "error"; text: string };
+
+type StaticRow = { kind: "banner" } | { kind: "row"; entry: Entry };
 
 export interface AppProps {
   provider: Provider;
@@ -36,7 +53,7 @@ export interface AppProps {
 interface PendingPerm {
   tool: ToolSpec;
   input: unknown;
-  resolve: (allow: boolean) => void;
+  resolve: (choice: PermissionChoice) => void;
 }
 
 export function App({
@@ -52,6 +69,13 @@ export function App({
 }: AppProps) {
   const { exit } = useApp();
   const [entries, setEntries] = useState<Entry[]>([]);
+  // Authoritative copy updated synchronously, so we can read it mid-event-loop
+  // (React's functional updaters run later/batched). All mutations go through update().
+  const entriesRef = useRef<Entry[]>([]);
+  // Entries [0, committed) are finalized → rendered in <Static> (printed once,
+  // never repainted). The tail [committed, …) is the live, in-progress turn.
+  const [committed, setCommitted] = useState(0);
+
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -60,28 +84,38 @@ export function App({
   const [modelLabel, setModelLabel] = useState(`${provider.id}:${provider.model}`);
   const [mode, setMode] = useState<PermissionMode>("ask");
   const [autoRoute, setAutoRoute] = useState(!!autoRouteDefault && !!route);
+  const [ctxWindow, setCtxWindow] = useState(provider.capabilities().contextWindow);
+  const [ctxTokens, setCtxTokens] = useState(0); // last turn's input tokens (≈ live context)
+  const [sessionTok, setSessionTok] = useState({ in: 0, out: 0 });
 
-  const add = (e: Entry) => setEntries((p) => [...p, e]);
+  const update = (fn: (prev: Entry[]) => Entry[]) => {
+    const next = fn(entriesRef.current);
+    entriesRef.current = next;
+    setEntries(next);
+  };
+  const commit = () => setCommitted(entriesRef.current.length);
+
+  const add = (e: Entry) => update((p) => [...p, e]);
   const appendAssistant = (t: string) =>
-    setEntries((p) => {
+    update((p) => {
       const last = p[p.length - 1];
       if (last && last.kind === "assistant") {
         return [...p.slice(0, -1), { ...last, text: last.text + t }];
       }
       return [...p, { kind: "assistant", text: t }];
     });
-  const setToolResult = (id: string, result: string, isError?: boolean) =>
-    setEntries((p) =>
-      p.map((e) => (e.kind === "tool" && e.id === id ? { ...e, result, isError } : e)),
+  const setToolResult = (id: string, result: string, isError?: boolean, display?: string) =>
+    update((p) =>
+      p.map((e) => (e.kind === "tool" && e.id === id ? { ...e, result, isError, display } : e)),
     );
   const setToolDenied = (id: string, reason?: string) =>
-    setEntries((p) =>
+    update((p) =>
       p.map((e) => (e.kind === "tool" && e.id === id ? { ...e, denied: true, reason } : e)),
     );
 
   const promptPermission = useCallback(
     (req: { tool: ToolSpec; input: unknown }) =>
-      new Promise<boolean>((resolve) => setPerm({ ...req, resolve })),
+      new Promise<PermissionChoice>((resolve) => setPerm({ ...req, resolve })),
     [],
   );
 
@@ -97,17 +131,16 @@ export function App({
     return () => clearInterval(t);
   }, [busy]);
 
-  // answer permission prompt
+  // answer permission prompt: y/enter=once · a=always (session) · n/esc=deny
   useInput(
     (ch, key) => {
       if (!perm) return;
-      if (ch.toLowerCase() === "y" || key.return) {
-        perm.resolve(true);
-        setPerm(null);
-      } else if (ch.toLowerCase() === "n" || key.escape) {
-        perm.resolve(false);
-        setPerm(null);
-      }
+      const c = ch.toLowerCase();
+      if (c === "y" || key.return) perm.resolve("once");
+      else if (c === "a") perm.resolve("always");
+      else if (c === "n" || key.escape) perm.resolve("deny");
+      else return;
+      setPerm(null);
     },
     { isActive: !!perm },
   );
@@ -132,10 +165,19 @@ export function App({
             add({ kind: "tool", id: ev.call.id, name: ev.call.name, input: ev.call.input });
             break;
           case "tool_result":
-            setToolResult(ev.result.id, ev.result.output, ev.result.isError);
+            setToolResult(ev.result.id, ev.result.output, ev.result.isError, ev.display);
             break;
           case "tool_denied":
             setToolDenied(ev.call.id, ev.reason);
+            break;
+          case "turn_complete":
+            if (ev.usage) {
+              setCtxTokens(ev.usage.inputTokens);
+              setSessionTok((s) => ({
+                in: s.in + ev.usage!.inputTokens,
+                out: s.out + ev.usage!.outputTokens,
+              }));
+            }
             break;
           case "error":
             add({ kind: "error", text: `error: ${ev.error}` });
@@ -147,7 +189,14 @@ export function App({
       else add({ kind: "error", text: String(e) });
     } finally {
       setBusy(false);
+      commit(); // finished turn → move it into <Static> so it stops repainting
     }
+  };
+
+  const switchTo = (next: Provider, label: string) => {
+    agentRef.current.setProvider(next);
+    setModelLabel(label);
+    setCtxWindow(next.capabilities().contextWindow);
   };
 
   const handleSubmit = async (raw: string) => {
@@ -168,7 +217,9 @@ export function App({
       return add({ kind: "error", text: "settings unavailable" });
     }
     if (v === "/clear") {
+      entriesRef.current = [];
       setEntries([]);
+      setCommitted(0);
       return;
     }
     if (v === "/keys") {
@@ -195,8 +246,7 @@ export function App({
       if (!onModelSwitch) return add({ kind: "error", text: "model switching unavailable" });
       try {
         const next = onModelSwitch(arg);
-        agentRef.current.setProvider(next);
-        setModelLabel(`${next.id}:${next.model}`);
+        switchTo(next, `${next.id}:${next.model}`);
         add({ kind: "system", text: `model → ${next.id}:${next.model}` });
       } catch (e) {
         add({ kind: "error", text: String(e) });
@@ -209,14 +259,14 @@ export function App({
     if (autoRoute && route) {
       try {
         const r = await route(v);
-        agentRef.current.setProvider(r.provider);
-        setModelLabel(r.label);
+        switchTo(r.provider, r.label);
         add({ kind: "system", text: `routed → ${r.tier} (${r.label})` });
       } catch (e) {
         add({ kind: "error", text: `route failed: ${String(e)}` });
       }
     }
 
+    commit(); // user prompt → Static before the (repainting) turn begins
     setVerb(WORK_VERBS[Math.floor(Math.random() * WORK_VERBS.length)]);
     agentRef.current.pushUser(v);
     const controller = new AbortController();
@@ -225,13 +275,28 @@ export function App({
   };
 
   const sandboxLabel = sandbox.root.startsWith("docker:") ? "docker" : "local";
+  const staticRows: StaticRow[] = [
+    { kind: "banner" },
+    ...entries.slice(0, committed).map((entry) => ({ kind: "row" as const, entry })),
+  ];
+  const liveEntries = entries.slice(committed);
 
   return (
     <Box flexDirection="column">
-      <Banner cwd={cwd} model={modelLabel} />
+      {/* Finished turns: printed once to scrollback, never repainted → no flicker. */}
+      <Static items={staticRows}>
+        {(row, i) =>
+          row.kind === "banner" ? (
+            <Banner key="banner" cwd={cwd} model={modelLabel} />
+          ) : (
+            <EntryView key={i} entry={row.entry} />
+          )
+        }
+      </Static>
 
-      {entries.map((e, i) => (
-        <EntryView key={i} entry={e} />
+      {/* Live region: the in-progress turn + composer (the only repainting part). */}
+      {liveEntries.map((e, i) => (
+        <EntryView key={committed + i} entry={e} />
       ))}
 
       {perm ? (
@@ -244,25 +309,46 @@ export function App({
         >
           <Text color={theme.warning}>Permission required</Text>
           <Text>
-            {sym.bullet} {perm.tool.name}(<Text color={theme.dim}>{compact(perm.input)}</Text>){" "}
-            <Text color={theme.dim}>[{perm.tool.permission}]</Text>
+            {sym.bullet} <Text bold>{cap(perm.tool.name)}</Text>(
+            <Text color={theme.dim}>{trunc(formatToolCall(perm.tool.name, perm.input), ARG_WIDTH)}</Text>
+            ) <Text color={theme.dim}>[{perm.tool.permission}]</Text>
           </Text>
-          <Text color={theme.dim}>y/enter allow · n/esc deny</Text>
+          <Text color={theme.dim}>
+            <Text color={theme.success}>y</Text>/enter allow once ·{" "}
+            <Text color={theme.success}>a</Text> allow for session ·{" "}
+            <Text color={theme.error}>n</Text>/esc deny
+          </Text>
         </Box>
       ) : (
         <>
-          <Box borderStyle="round" borderColor={busy ? theme.accentDim : theme.accent} paddingX={1} marginTop={1}>
+          <Box
+            borderStyle="round"
+            borderColor={busy ? theme.accentDim : theme.accent}
+            paddingX={1}
+            marginTop={1}
+          >
             <Text color={theme.accent}>{sym.prompt} </Text>
-            <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} placeholder="ask anything · / for commands" />
+            <TextInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleSubmit}
+              placeholder="ask anything · / for commands"
+            />
           </Box>
           <Text color={theme.dim}>
             {busy ? (
               <Text color={theme.accent}>
-                <Spinner type="dots" /> {verb}… <Text color={theme.dim}>({elapsed}s · esc to interrupt)</Text>
+                <Spinner type="dots" /> {verb}…{" "}
+                <Text color={theme.dim}>({elapsed}s · esc to interrupt)</Text>
               </Text>
             ) : (
               <Text>
-                {"  "}{modelLabel} · {mode} · route:{autoRoute ? "on" : "off"} · sandbox:{sandboxLabel}
+                {"  "}
+                {modelLabel} · {mode} · route:{autoRoute ? "on" : "off"} · sandbox:{sandboxLabel}
+                {ctxTokens > 0 ? ` · ctx ${fmtK(ctxTokens)}/${fmtK(ctxWindow)}` : ""}
+                {sessionTok.in + sessionTok.out > 0
+                  ? ` · Σ ${fmtK(sessionTok.in + sessionTok.out)} tok`
+                  : ""}
               </Text>
             )}
           </Text>
@@ -295,18 +381,18 @@ function EntryView({ entry: e }: { entry: Entry }) {
         <Box flexDirection="column">
           <Text>
             <Text color={theme.tool}>{sym.bullet} </Text>
-            <Text bold>{cap(e.name)}</Text>(<Text color={theme.dim}>{compact(e.input)}</Text>)
+            <Text bold>{cap(e.name)}</Text>(
+            <Text color={theme.dim}>{trunc(formatToolCall(e.name, e.input), ARG_WIDTH)}</Text>)
           </Text>
           {e.denied ? (
             <Text color={theme.error}>
               {"  "}
               {sym.branch} denied: {e.reason ?? "permission"}
             </Text>
+          ) : e.display != null ? (
+            <DiffView display={e.display} />
           ) : e.result != null ? (
-            <Text color={e.isError ? theme.error : theme.dim}>
-              {"  "}
-              {sym.branch} {oneLine(e.result)}
-            </Text>
+            <ToolOutput output={e.result} isError={e.isError} />
           ) : (
             <Text color={theme.dim}>
               {"  "}
@@ -316,21 +402,104 @@ function EntryView({ entry: e }: { entry: Entry }) {
         </Box>
       );
     case "system":
-      return <Text color={theme.dim}>{"  "}{e.text}</Text>;
+      return (
+        <Text color={theme.dim}>
+          {"  "}
+          {e.text}
+        </Text>
+      );
     case "error":
       return <Text color={theme.error}>{e.text}</Text>;
+  }
+}
+
+/** Multi-line tool output under the ⎿ branch, capped with a "+N lines" hint. */
+function ToolOutput({ output, isError }: { output: string; isError?: boolean }) {
+  const all = output.replace(/\s+$/, "").split("\n");
+  const shown = all.slice(0, MAX_RESULT_LINES);
+  const more = all.length - shown.length;
+  const color = isError ? theme.error : theme.dim;
+  return (
+    <Box flexDirection="column">
+      {shown.map((ln, i) => (
+        <Text key={i} color={color}>
+          {i === 0 ? `  ${sym.branch} ` : "    "}
+          {ln}
+        </Text>
+      ))}
+      {more > 0 ? (
+        <Text color={theme.dim}>
+          {"    "}… +{more} lines
+        </Text>
+      ) : null}
+    </Box>
+  );
+}
+
+/** Colored unified diff (+ green / - red / context dim) under the ⎿ branch. */
+function DiffView({ display }: { display: string }) {
+  const all = display.split("\n");
+  const shown = all.slice(0, MAX_DIFF_LINES);
+  const more = all.length - shown.length;
+  return (
+    <Box flexDirection="column">
+      {shown.map((ln, i) => {
+        const color = ln.startsWith("+")
+          ? theme.success
+          : ln.startsWith("-")
+            ? theme.error
+            : theme.dim;
+        return (
+          <Text key={i} color={color}>
+            {i === 0 ? `  ${sym.branch} ` : "    "}
+            {ln}
+          </Text>
+        );
+      })}
+      {more > 0 ? (
+        <Text color={theme.dim}>
+          {"    "}… +{more} lines
+        </Text>
+      ) : null}
+    </Box>
+  );
+}
+
+/** Claude-Code-style tool header arg: `Read(path)` not `Read({"path":…})`. */
+function formatToolCall(name: string, input: unknown): string {
+  const a = (input ?? {}) as Record<string, unknown>;
+  const s = (k: string) => (typeof a[k] === "string" ? (a[k] as string) : "");
+  switch (name) {
+    case "read":
+    case "write":
+    case "edit":
+    case "multi_edit":
+    case "ls":
+      return s("path");
+    case "grep":
+      return [s("pattern"), a.glob ? `glob=${String(a.glob)}` : ""].filter(Boolean).join(" ");
+    case "glob":
+      return s("pattern");
+    case "bash":
+      return s("command");
+    default:
+      return compact(input);
   }
 }
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-function oneLine(s: string): string {
+function trunc(s: string, n: number): string {
   const t = s.replace(/\s+/g, " ").trim();
-  return t.length > 100 ? t.slice(0, 100) + "…" : t;
+  return t.length > n ? t.slice(0, n) + "…" : t;
 }
 function compact(input: unknown): string {
   const s = JSON.stringify(input);
-  if (!s) return "";
-  return s.length > 80 ? s.slice(0, 80) + "…" : s;
+  return s ?? "";
+}
+function fmtK(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return (k < 10 ? k.toFixed(1) : Math.round(k).toString()) + "k";
 }

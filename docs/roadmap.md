@@ -55,13 +55,25 @@ plus a live `pnpm smoke xai:grok-4.3` round-trip. Note: ripgrep is not installed
 so the JS grep path is the live-tested one; the `rg` fast-path is typecheck-verified and engages
 automatically when `rg` is present.
 
+## Phase 3 — TUI parity ✅ (2026-06-24)
+
+Made the terminal UI feel like Claude Code rather than a raw event log.
+
+- **Edit/write diffs** — `edit`, `multi_edit`, and `write` emit a colored unified diff (LCS
+  with collapsed context) through a UI-only `display` channel on `ToolRunResult`. The diff is
+  shown under `⎿` (green `+` / red `-` / dim context); the model-facing tool output stays terse,
+  so diffs never bloat the context window.
+- **Multi-line tool output** — results render several indented lines with a `… +N lines` hint
+  instead of a single truncated line.
+- **Sticky permissions** — the prompt is three-way: allow once (`y`), allow for the session
+  (`a`), or deny (`n`). The engine remembers session grants and stops re-prompting for that tool.
+- **Token / context meter** — the status bar shows `ctx <live>/<window>` and a session token
+  total, accumulated from each turn's usage and updated on model switch / route.
+- **No-flicker rendering** — finished turns are committed to an Ink `<Static>` region so they
+  print once and never repaint; only the in-progress turn and the composer redraw during
+  streaming. Tool-call headers read `Read(path)` instead of raw JSON.
+
 ## Future work
-
-### Phase 3 — TUI parity
-
-- Edit results rendered as diffs (`+`/`-`); multi-line, expandable tool output.
-- Sticky permissions — "always allow this tool for the session" — instead of re-prompting.
-- Token + context-window meter in the status bar.
 
 ### Phase 4 — Persistence & observability
 
@@ -80,5 +92,5 @@ automatically when `rg` is present.
 |---|---|---|
 | 1 | Project context · loop hardening · numbered `read` | ✅ done (2026-06-23) |
 | 2 | Tools parity (grep/edit/ls/parallel) | ✅ done (2026-06-24) |
-| 3 | TUI parity (diffs, sticky perms, token meter) | planned |
+| 3 | TUI parity (diffs, sticky perms, token meter, no-flicker) | ✅ done (2026-06-24) |
 | 4 | Persistence & logs (transcripts, `--resume`) | planned |
