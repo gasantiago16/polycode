@@ -125,7 +125,20 @@
 <td><code>--port &lt;n&gt;</code></td>
 <td>Server port (default 8787).</td>
 </tr>
+<tr>
+<td><code>--continue</code></td>
+<td>Resume the most recent session in this project.</td>
+</tr>
+<tr>
+<td><code>--resume &lt;id&gt;</code></td>
+<td>Resume a specific session id.</td>
+</tr>
+<tr>
+<td><code>--sessions</code></td>
+<td>List saved sessions (id · model · title) and exit.</td>
+</tr>
 </tbody></table>
+<p>Sessions are stored as <code>&lt;cwd&gt;/.polycode/sessions/&lt;id&gt;.json</code> and saved after each turn.</p>
 <h2>Slash commands (in the TUI)</h2>
 <table>
 <thead>
@@ -164,11 +177,14 @@
 </tr>
 </tbody></table>
 <h2>Permission prompt</h2>
-<p>When a gated tool runs (per the active <code>/mode</code>), the TUI shows:</p>
-<pre><code>Allow &lt;tool&gt; [&lt;class&gt;]? &lt;input&gt;  (y/n)
-</code></pre>
-<p>Press <code>y</code> to allow, <code>n</code> (or <code>Esc</code>) to deny. A denied call is reported back to the model so
-it can adapt.</p>
+<p>When a gated tool runs (per the active <code>/mode</code>), the TUI shows a prompt with the tool, its
+class, and the call. Answer with:</p>
+<ul>
+<li><code>y</code> / <code>Enter</code> — allow once</li>
+<li><code>a</code> — allow this tool for the rest of the session (sticky; <code>plan</code> mode still overrides)</li>
+<li><code>n</code> / <code>Esc</code> — deny</li>
+</ul>
+<p>A denied call is reported back to the model so it can adapt.</p>
 <h2>Server endpoints (hosted mode)</h2>
 <table>
 <thead>

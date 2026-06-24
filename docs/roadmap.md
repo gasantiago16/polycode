@@ -73,12 +73,27 @@ Made the terminal UI feel like Claude Code rather than a raw event log.
   print once and never repaint; only the in-progress turn and the composer redraw during
   streaming. Tool-call headers read `Read(path)` instead of raw JSON.
 
+## Phase 4 — Persistence & observability ✅ (2026-06-24)
+
+polycode's first on-disk surface — the conversation is now saved and resumable.
+
+- **Session transcripts** — after every turn the conversation (canonical messages) is written to
+  `<cwd>/.polycode/sessions/<id>.json` (id is timestamped + random, so files sort chronologically).
+  `.polycode/` is gitignored and ignored by the sandbox walk, so transcripts never pollute
+  search/context. This is also the **log/observability** surface that previously didn't exist.
+- **Resume** — `--continue` reopens the most recent session in the project; `--resume <id>` reopens
+  a specific one. The saved messages seed the agent (`AgentOptions.initialMessages`) and are
+  rebuilt into the on-screen history, so a resumed session both *remembers* and *shows* the prior
+  conversation. A fresh system prompt (current project context) is regenerated on resume.
+- **`--sessions`** — lists saved transcripts (id · model · title) and exits.
+- **Layering** — the `SessionStore` (node:fs) lives in the CLI; the TUI stays I/O-free and just
+  receives `initialMessages` + an `onPersist` callback. Persistence is best-effort — a write error
+  never crashes a turn.
+
+Verification: `pnpm typecheck` clean; harness round-trips a real agent conversation (save → load →
+seed a fresh agent → continue), and `--sessions` + live smoke pass.
+
 ## Future work
-
-### Phase 4 — Persistence & observability
-
-- Session transcripts written to `.polycode/sessions/`, plus a `--resume` flag.
-- This is also the **logs** surface: polycode currently writes none.
 
 ### Later
 
@@ -93,4 +108,4 @@ Made the terminal UI feel like Claude Code rather than a raw event log.
 | 1 | Project context · loop hardening · numbered `read` | ✅ done (2026-06-23) |
 | 2 | Tools parity (grep/edit/ls/parallel) | ✅ done (2026-06-24) |
 | 3 | TUI parity (diffs, sticky perms, token meter, no-flicker) | ✅ done (2026-06-24) |
-| 4 | Persistence & logs (transcripts, `--resume`) | planned |
+| 4 | Persistence & logs (transcripts, `--continue`/`--resume`/`--sessions`) | ✅ done (2026-06-24) |

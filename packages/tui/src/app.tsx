@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box, Static, Text, useApp, useInput } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import {
   Agent,
   PermissionEngine,
+  type CanonicalMessage,
   type PermissionMode,
   type PermissionChoice,
   type Provider,
@@ -53,6 +54,10 @@ export interface AppProps {
   validate?: (p: ProviderId) => Promise<boolean>;
   /** Agentic key-provisioning hook (for the in-session settings overlay). */
   onAgentic?: (p: ProviderId) => Promise<string> | string;
+  /** Prior conversation to resume (rendered as history + seeded into the agent). */
+  initialMessages?: CanonicalMessage[];
+  /** Persist the conversation after each turn (session transcript). */
+  onPersist?: (messages: CanonicalMessage[], model: string) => void;
 }
 
 interface PendingPerm {
@@ -72,15 +77,19 @@ export function App({
   autoRoute: autoRouteDefault,
   validate,
   onAgentic,
+  initialMessages,
+  onPersist,
 }: AppProps) {
   const { exit } = useApp();
-  const [entries, setEntries] = useState<Entry[]>([]);
+  // Reconstruct any resumed conversation as already-finalized history.
+  const seed = useMemo(() => messagesToEntries(initialMessages ?? []), [initialMessages]);
+  const [entries, setEntries] = useState<Entry[]>(seed);
   // Authoritative copy updated synchronously, so we can read it mid-event-loop
   // (React's functional updaters run later/batched). All mutations go through update().
-  const entriesRef = useRef<Entry[]>([]);
+  const entriesRef = useRef<Entry[]>(seed);
   // Entries [0, committed) are finalized → rendered in <Static> (printed once,
   // never repainted). The tail [committed, …) is the live, in-progress turn.
-  const [committed, setCommitted] = useState(0);
+  const [committed, setCommitted] = useState(seed.length);
 
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -127,7 +136,9 @@ export function App({
   );
 
   const engineRef = useRef(new PermissionEngine("ask", promptPermission));
-  const agentRef = useRef(new Agent(provider, tools, engineRef.current, { system, sandbox }));
+  const agentRef = useRef(
+    new Agent(provider, tools, engineRef.current, { system, sandbox, initialMessages }),
+  );
   const abortRef = useRef<AbortController | null>(null);
 
   // elapsed-time ticker while busy
@@ -200,6 +211,8 @@ export function App({
     } finally {
       setBusy(false);
       commit(); // finished turn → move it into <Static> so it stops repainting
+      const p = agentRef.current.getProvider();
+      onPersist?.(agentRef.current.history() as CanonicalMessage[], `${p.id}:${p.model}`);
     }
   };
 
@@ -515,6 +528,43 @@ function formatToolCall(name: string, input: unknown): string {
   }
   // Fall back to raw input so a malformed/dangerous call is never shown blank.
   return primary || compact(input);
+}
+
+/** Rebuild the visible history from a resumed conversation (no diffs — those
+ * live in the UI-only display channel and aren't persisted). */
+function messagesToEntries(messages: CanonicalMessage[]): Entry[] {
+  const out: Entry[] = [];
+  for (const m of messages) {
+    if (m.role === "user") {
+      const text = m.content
+        .filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join("");
+      if (text) out.push({ kind: "user", text });
+    } else if (m.role === "assistant") {
+      const text = m.content
+        .filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join("");
+      if (text) out.push({ kind: "assistant", text });
+      for (const p of m.content) {
+        if (p.type === "tool_call") {
+          out.push({ kind: "tool", id: p.id, name: p.name, input: p.input });
+        }
+      }
+    } else if (m.role === "tool") {
+      for (const p of m.content) {
+        if (p.type === "tool_result") {
+          const t = out.find((e) => e.kind === "tool" && e.id === p.id);
+          if (t && t.kind === "tool") {
+            t.result = p.output;
+            t.isError = p.isError;
+          }
+        }
+      }
+    }
+  }
+  return out;
 }
 
 function cap(s: string): string {

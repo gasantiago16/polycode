@@ -112,12 +112,25 @@ total, accumulated from each turn&#39;s usage and updated on model switch / rout
 print once and never repaint; only the in-progress turn and the composer redraw during
 streaming. Tool-call headers read <code>Read(path)</code> instead of raw JSON.</li>
 </ul>
-<h2>Future work</h2>
-<h3>Phase 4 — Persistence &amp; observability</h3>
+<h2>Phase 4 — Persistence &amp; observability ✅ (2026-06-24)</h2>
+<p>polycode&#39;s first on-disk surface — the conversation is now saved and resumable.</p>
 <ul>
-<li>Session transcripts written to <code>.polycode/sessions/</code>, plus a <code>--resume</code> flag.</li>
-<li>This is also the <strong>logs</strong> surface: polycode currently writes none.</li>
+<li><strong>Session transcripts</strong> — after every turn the conversation (canonical messages) is written to
+<code>&lt;cwd&gt;/.polycode/sessions/&lt;id&gt;.json</code> (id is timestamped + random, so files sort chronologically).
+<code>.polycode/</code> is gitignored and ignored by the sandbox walk, so transcripts never pollute
+search/context. This is also the <strong>log/observability</strong> surface that previously didn&#39;t exist.</li>
+<li><strong>Resume</strong> — <code>--continue</code> reopens the most recent session in the project; <code>--resume &lt;id&gt;</code> reopens
+a specific one. The saved messages seed the agent (<code>AgentOptions.initialMessages</code>) and are
+rebuilt into the on-screen history, so a resumed session both <em>remembers</em> and <em>shows</em> the prior
+conversation. A fresh system prompt (current project context) is regenerated on resume.</li>
+<li><strong><code>--sessions</code></strong> — lists saved transcripts (id · model · title) and exits.</li>
+<li><strong>Layering</strong> — the <code>SessionStore</code> (node:fs) lives in the CLI; the TUI stays I/O-free and just
+receives <code>initialMessages</code> + an <code>onPersist</code> callback. Persistence is best-effort — a write error
+never crashes a turn.</li>
 </ul>
+<p>Verification: <code>pnpm typecheck</code> clean; harness round-trips a real agent conversation (save → load →
+seed a fresh agent → continue), and <code>--sessions</code> + live smoke pass.</p>
+<h2>Future work</h2>
 <h3>Later</h3>
 <ul>
 <li>Context compaction when history approaches the model&#39;s window (summarize-and-drop).</li>
@@ -150,8 +163,8 @@ streaming. Tool-call headers read <code>Read(path)</code> instead of raw JSON.</
 </tr>
 <tr>
 <td>4</td>
-<td>Persistence &amp; logs (transcripts, <code>--resume</code>)</td>
-<td>planned</td>
+<td>Persistence &amp; logs (transcripts, <code>--continue</code>/<code>--resume</code>/<code>--sessions</code>)</td>
+<td>✅ done (2026-06-24)</td>
 </tr>
 </tbody></table>
 

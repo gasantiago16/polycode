@@ -24,6 +24,11 @@
 | `--sandbox <local\|docker>` | Tool-execution sandbox (docker isolates shell). |
 | `--serve` | Start the server instead of the TUI. |
 | `--port <n>` | Server port (default 8787). |
+| `--continue` | Resume the most recent session in this project. |
+| `--resume <id>` | Resume a specific session id. |
+| `--sessions` | List saved sessions (id · model · title) and exit. |
+
+Sessions are stored as `<cwd>/.polycode/sessions/<id>.json` and saved after each turn.
 
 ## Slash commands (in the TUI)
 
@@ -39,14 +44,14 @@
 
 ## Permission prompt
 
-When a gated tool runs (per the active `/mode`), the TUI shows:
+When a gated tool runs (per the active `/mode`), the TUI shows a prompt with the tool, its
+class, and the call. Answer with:
 
-```
-Allow <tool> [<class>]? <input>  (y/n)
-```
+- `y` / `Enter` — allow once
+- `a` — allow this tool for the rest of the session (sticky; `plan` mode still overrides)
+- `n` / `Esc` — deny
 
-Press `y` to allow, `n` (or `Esc`) to deny. A denied call is reported back to the model so
-it can adapt.
+A denied call is reported back to the model so it can adapt.
 
 ## Server endpoints (hosted mode)
 
