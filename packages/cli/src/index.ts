@@ -105,6 +105,8 @@ async function main(): Promise<void> {
       createdAt = data.createdAt;
     } else if (values.resume) {
       console.error(`no session "${values.resume}" in this project — starting fresh`);
+    } else {
+      console.error("no prior session to continue — starting fresh");
     }
   }
   const now = new Date();

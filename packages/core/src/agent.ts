@@ -48,7 +48,9 @@ export class Agent {
     private permissions: PermissionEngine,
     private opts: AgentOptions,
   ) {
-    this.messages = opts.initialMessages ? [...opts.initialMessages] : [];
+    // Deep-copy: the seed is owned by the caller (e.g. a loaded session); a
+    // shallow copy would share content objects and risk cross-mutation.
+    this.messages = opts.initialMessages ? structuredClone(opts.initialMessages) : [];
   }
 
   /** Runtime model switching (/model) swaps the provider without losing history. */

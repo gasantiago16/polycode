@@ -211,8 +211,13 @@ export function App({
     } finally {
       setBusy(false);
       commit(); // finished turn → move it into <Static> so it stops repainting
-      const p = agentRef.current.getProvider();
-      onPersist?.(agentRef.current.history() as CanonicalMessage[], `${p.id}:${p.model}`);
+      // Only persist a resumable state: skip on interrupt or a dangling
+      // assistant tool_use with no results (providers reject that on replay).
+      const history = agentRef.current.history() as CanonicalMessage[];
+      if (!signal.aborted && isResumable(history)) {
+        const p = agentRef.current.getProvider();
+        onPersist?.(history, `${p.id}:${p.model}`);
+      }
     }
   };
 
@@ -530,33 +535,32 @@ function formatToolCall(name: string, input: unknown): string {
   return primary || compact(input);
 }
 
+type ToolEntry = Extract<Entry, { kind: "tool" }>;
+
 /** Rebuild the visible history from a resumed conversation (no diffs — those
  * live in the UI-only display channel and aren't persisted). */
 function messagesToEntries(messages: CanonicalMessage[]): Entry[] {
   const out: Entry[] = [];
+  const toolById = new Map<string, ToolEntry>(); // O(1) tool_result → tool_call match
   for (const m of messages) {
     if (m.role === "user") {
-      const text = m.content
-        .filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join("");
+      const text = textOf(m.content);
       if (text) out.push({ kind: "user", text });
     } else if (m.role === "assistant") {
-      const text = m.content
-        .filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join("");
+      const text = textOf(m.content);
       if (text) out.push({ kind: "assistant", text });
       for (const p of m.content) {
         if (p.type === "tool_call") {
-          out.push({ kind: "tool", id: p.id, name: p.name, input: p.input });
+          const t: ToolEntry = { kind: "tool", id: p.id, name: p.name, input: p.input };
+          out.push(t);
+          toolById.set(p.id, t);
         }
       }
     } else if (m.role === "tool") {
       for (const p of m.content) {
         if (p.type === "tool_result") {
-          const t = out.find((e) => e.kind === "tool" && e.id === p.id);
-          if (t && t.kind === "tool") {
+          const t = toolById.get(p.id); // orphan results (truncated history) are dropped
+          if (t) {
             t.result = p.output;
             t.isError = p.isError;
           }
@@ -565,6 +569,22 @@ function messagesToEntries(messages: CanonicalMessage[]): Entry[] {
     }
   }
   return out;
+}
+
+function textOf(content: CanonicalMessage["content"]): string {
+  return content
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+}
+
+/** Safe to persist/resume only if the history doesn't end on an assistant turn
+ * whose tool calls have no results yet (providers reject that on replay). */
+function isResumable(messages: CanonicalMessage[]): boolean {
+  const last = messages[messages.length - 1];
+  if (!last) return false;
+  if (last.role === "assistant" && last.content.some((p) => p.type === "tool_call")) return false;
+  return true;
 }
 
 function cap(s: string): string {
