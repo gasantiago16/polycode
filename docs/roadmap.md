@@ -95,11 +95,18 @@ seed a fresh agent → continue), and `--sessions` + live smoke pass.
 
 ## Future work
 
-### Later
+Phases 1–4 were "basic parity." The forward plan to **Claude-Code-class** — MCP, context
+compaction, subagents, skills/commands, web tools, hooks, checkpoints, server hardening — is laid
+out, sequenced, and grounded in a code audit + feature diff in the
+[**Build-out Plan**](buildout-plan.md). Start there.
 
-- Context compaction when history approaches the model's window (summarize-and-drop).
-- Parallel-safe tool batching wired into the loop.
-- Agentic key provisioning — the Settings `a` hook is currently a stub (MCP/tool flow TODO).
+### Highlights from the plan
+
+- **Phase 5.0** — pre-flight ground truth (verify model IDs, pin AI SDK, fill real context windows).
+- **Phase 5.1** — MCP client (force multiplier; cheap via the AI SDK's `experimental_createMCPClient`).
+- **Phase 5.2** — context compaction (correctness: history is currently unbounded).
+- **Phase 5.3 / 5.4 / 5.5** — subagents, skills/commands, web tools + todo.
+- Agentic key provisioning — the Settings `a` hook is still a stub (MCP/tool flow TODO).
 
 ## Status at a glance
 
