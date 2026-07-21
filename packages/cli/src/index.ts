@@ -196,7 +196,7 @@ async function validateKey(cfg: AppConfig, p: ProviderId): Promise<boolean> {
   }
 }
 
-/** Build the tool-execution sandbox; fall back to local if docker is unavailable. */
+/** Build the tool-execution sandbox. Explicit Docker mode always fails closed. */
 async function buildSandbox(cfg: AppConfig, override: SandboxKind | undefined, root: string) {
   const kind = override ?? cfg.sandbox?.kind ?? "local";
   try {
@@ -204,7 +204,8 @@ async function buildSandbox(cfg: AppConfig, override: SandboxKind | undefined, r
     if (kind === "docker") console.error(`sandbox: docker (${sb.root})`);
     return sb;
   } catch (e) {
-    console.error(`sandbox: ${String(e)} — falling back to local`);
+    if (kind === "docker") throw new Error(`docker sandbox required: ${String(e)}`);
+    console.error(`sandbox: ${String(e)} — using local sandbox`);
     return createSandbox({ kind: "local", root });
   }
 }

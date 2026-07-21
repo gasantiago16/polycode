@@ -1,6 +1,6 @@
 {
   "name": "@polycode/cli",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "polycode — a multi-model terminal coding agent (OpenAI, Gemini, xAI).",
   "type": "module",
   "bin": { "poly": "./dist/index.js" },
