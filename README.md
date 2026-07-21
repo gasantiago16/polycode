@@ -4,9 +4,18 @@ A terminal coding agent with a Claude Code–style interface, built **provider-a
 the same agent engine drives **OpenAI**, **Google Gemini**, and **xAI (Grok)** — with
 runtime model switching, smart routing, and an optional hosted server mode.
 
-> Status: **scaffold**. The architecture, types, loop, providers, tools, TUI, and server
-> are wired end-to-end. Model IDs and a couple of SDK field names are flagged to confirm
-> before first real run (see notes below).
+> Status: **experimental local alpha (`0.1.0-alpha`)**. The local agent loop, tools,
+> permissions, TUI, routing, and session persistence work end-to-end and have an automated
+> regression suite. Provider compatibility still needs live verification. Hosted mode is an
+> unsafe scaffold and must not be exposed to untrusted networks.
+
+## Supported baseline
+
+- Node.js 20 and 22 on Windows, macOS, and Linux (enforced in CI).
+- Local mode is the supported interactive path for this alpha.
+- Docker mode fails closed when Docker is unavailable; it never silently executes on the host.
+- Hosted mode has no authentication or tenant isolation and runs tools with broad permissions.
+  Treat it as local development scaffolding only.
 
 ## Documentation
 
@@ -60,6 +69,7 @@ pnpm dev -- --model openai:gpt-5            # force a model
 pnpm dev -- --tier cheap                    # force a routing tier
 pnpm serve -- --port 8787                   # hosted mode (POST /chat, SSE)
 pnpm typecheck
+pnpm test
 ```
 
 In the TUI: `/model <provider:model>` · `/mode <plan|ask|acceptEdits|yolo>` · `/help` · `/exit`.
@@ -83,8 +93,8 @@ for a model-driven classifier later.
 
 ## Before first real run — confirm these
 
-1. **Model IDs** in `polycode.config.json` (`gpt-5`, `gemini-2.5-*`, `grok-*`) against current
-   OpenAI / Google / xAI docs — they're placeholders.
+1. **Model IDs** in `polycode.config.json` against current OpenAI / Google / xAI docs.
+   Defaults are candidates, not a guaranteed compatibility matrix until live verification lands.
 2. **AI SDK version**: `pnpm add ai @ai-sdk/openai @ai-sdk/google @ai-sdk/xai` to pin current.
    The adapter's `fullStream` part field names (`text-delta`, `reasoning-delta`, `tool-call`,
    `finish`) track AI SDK v5 — re-verify if you bump majors.

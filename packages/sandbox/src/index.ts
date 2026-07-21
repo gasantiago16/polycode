@@ -37,10 +37,10 @@ export class LocalSandbox implements Sandbox {
     return this.rootDir;
   }
 
-  private resolveSafe(rel: string): string {
+  private resolveLexical(rel: string): string {
     const abs = resolve(this.rootDir, rel);
     const r = relative(this.rootDir, abs);
-    if (r.startsWith("..") || r.split(sep).includes("..")) {
+    if (r === ".." || r.startsWith(".." + sep)) {
       throw new Error(`path escapes project root: ${rel}`);
     }
     // polycode's own metadata (session transcripts etc.) is off-limits to tools,
@@ -51,12 +51,34 @@ export class LocalSandbox implements Sandbox {
     return abs;
   }
 
+  private async resolveSafe(rel: string): Promise<string> {
+    const abs = this.resolveLexical(rel);
+    const physicalRoot = await fs.realpath(this.rootDir);
+    let existing = abs;
+    while (true) {
+      try {
+        existing = await fs.realpath(existing);
+        break;
+      } catch (e: any) {
+        if (e?.code !== "ENOENT") throw e;
+        const parent = dirname(existing);
+        if (parent === existing) throw e;
+        existing = parent;
+      }
+    }
+    const physicalRelative = relative(physicalRoot, existing);
+    if (physicalRelative === ".." || physicalRelative.startsWith(".." + sep)) {
+      throw new Error(`path escapes project root through a link: ${rel}`);
+    }
+    return abs;
+  }
+
   async readFile(rel: string): Promise<string> {
-    return fs.readFile(this.resolveSafe(rel), "utf8");
+    return fs.readFile(await this.resolveSafe(rel), "utf8");
   }
 
   async writeFile(rel: string, content: string): Promise<void> {
-    const abs = this.resolveSafe(rel);
+    const abs = await this.resolveSafe(rel);
     await fs.mkdir(dirname(abs), { recursive: true });
     await fs.writeFile(abs, content, "utf8");
   }

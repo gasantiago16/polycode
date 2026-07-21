@@ -1,5 +1,9 @@
 # Claude-Code Parity Roadmap
 
+> Release status: **0.1.0-alpha**. Local mode is under active stabilization. Hosted mode is
+> development-only until authentication, isolation, quotas, and restrictive permission policy
+> are implemented.
+
 polycode aims to be a Claude-Code-class terminal coding agent that is **provider-agnostic**
 across OpenAI, Google Gemini, and xAI (Grok). The engine was structurally sound early on
 (provider-blind loop, clean sandbox/permission seams) but *thin* — this roadmap tracks the
