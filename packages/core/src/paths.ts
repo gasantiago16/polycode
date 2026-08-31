@@ -1,6 +1,16 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 /** Project-relative path with `/` separators, no leading `./`. */
 export function normalizeRelPath(rel: string): string {
   return rel.replace(/\\/g, "/").replace(/^\.\//, "");
+}
+
+/** User config dir: POLYCODE_CONFIG_DIR, else %APPDATA%/polycode, else ~/.config/polycode. */
+export function polycodeConfigDir(): string {
+  if (process.env.POLYCODE_CONFIG_DIR) return process.env.POLYCODE_CONFIG_DIR;
+  if (process.env.APPDATA) return join(process.env.APPDATA, "polycode");
+  return join(homedir(), ".config", "polycode");
 }
 
 /**

@@ -1,7 +1,15 @@
 import { createRequire } from "node:module";
-import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  chmodSync,
+  existsSync,
+  lstatSync,
+  realpathSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export type ProviderId =
   | "openai"
@@ -39,6 +47,47 @@ export const ENV_ALIASES: Partial<Record<ProviderId, string[]>> = {
   muse: ["MODEL_API_KEY"],
   qwen: ["QWEN_API_KEY"],
 };
+
+/** Names a project `.env` is allowed to inject. Provider keys only. */
+export function dotenvAllowlist(): Set<string> {
+  const s = new Set<string>(Object.values(ENV_VAR));
+  for (const aliases of Object.values(ENV_ALIASES)) {
+    for (const a of aliases ?? []) s.add(a);
+  }
+  return s;
+}
+
+export function isDotEnvKeyAllowed(name: string): boolean {
+  if (!dotenvAllowlist().has(name)) return false;
+  const n = name.toUpperCase();
+  if (n.startsWith("POLYCODE_AUTH_TOKEN")) return false;
+  if (
+    n === "NODE_OPTIONS" ||
+    n === "NODE_PATH" ||
+    n === "NODE_EXTRA_CA_CERTS" ||
+    n === "PATH" ||
+    n.startsWith("LD_") ||
+    n.startsWith("DYLD_") ||
+    n.startsWith("PYTHON") ||
+    n === "HTTP_PROXY" ||
+    n === "HTTPS_PROXY" ||
+    n === "ALL_PROXY" ||
+    n === "NO_PROXY"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function resolvedInside(file: string, root: string): boolean {
+  try {
+    const a = realpathSync(root).replace(/\\/g, "/").toLowerCase();
+    const b = realpathSync(file).replace(/\\/g, "/").toLowerCase();
+    return b === a || b.startsWith(a.endsWith("/") ? a : `${a}/`);
+  } catch {
+    return false;
+  }
+}
 
 const LABELS: Record<ProviderId, string> = {
   openai: "OpenAI",
@@ -234,6 +283,13 @@ export function loadDotEnvFiles(files: string[]): string[] {
   const loaded: string[] = [];
   for (const f of files) {
     if (!existsSync(f)) continue;
+    try {
+      const st = lstatSync(f);
+      if (st.isDirectory() || st.isSocket?.() || st.isFIFO?.()) continue;
+    } catch {
+      continue;
+    }
+    if (!resolvedInside(f, dirname(f))) continue;
     let text: string;
     try {
       text = readFileSync(f, "utf8");
@@ -246,6 +302,7 @@ export function loadDotEnvFiles(files: string[]): string[] {
       if (!t || t.startsWith("#")) continue;
       const m = t.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
       if (!m) continue;
+      if (!isDotEnvKeyAllowed(m[1])) continue;
       let val = m[2].trim();
       if (
         (val.startsWith('"') && val.endsWith('"')) ||

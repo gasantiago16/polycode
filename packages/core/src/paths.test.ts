@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { commandTouchesProtected, isPolycodeToolPathAllowed, isProtectedProjectPath } from "./paths.js";
+import {
+  commandTouchesProtected,
+  isPolycodeToolPathAllowed,
+  isProtectedProjectPath,
+  polycodeConfigDir,
+} from "./paths.js";
 
 describe("isProtectedProjectPath", () => {
   it.each([".env", ".env.local", "apps/.env", ".ENV", ".git/config", ".ssh/id_rsa", ".polycode/sessions/x.json"])(
@@ -19,6 +24,23 @@ describe("isProtectedProjectPath", () => {
   it("allows curated polycode tool paths", () => {
     expect(isPolycodeToolPathAllowed(".polycode/memory.md")).toBe(true);
     expect(isPolycodeToolPathAllowed(".polycode/sessions/x.json")).toBe(false);
+  });
+});
+
+describe("polycodeConfigDir", () => {
+  it("uses APPDATA on Windows when POLYCODE_CONFIG_DIR is unset", () => {
+    const prevCfg = process.env.POLYCODE_CONFIG_DIR;
+    const prevApp = process.env.APPDATA;
+    delete process.env.POLYCODE_CONFIG_DIR;
+    process.env.APPDATA = "C:\\Users\\tester\\AppData\\Roaming";
+    try {
+      expect(polycodeConfigDir().replace(/\\/g, "/").toLowerCase()).toMatch(/appdata\/roaming\/polycode$/);
+    } finally {
+      if (prevCfg == null) delete process.env.POLYCODE_CONFIG_DIR;
+      else process.env.POLYCODE_CONFIG_DIR = prevCfg;
+      if (prevApp == null) delete process.env.APPDATA;
+      else process.env.APPDATA = prevApp;
+    }
   });
 });
 

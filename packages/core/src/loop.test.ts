@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MIN_LOOP_MS, formatLoopInterval, parseLoopCommand, parseLoopInterval } from "./loop.js";
+import {
+  MAX_LOOP_MS,
+  MIN_LOOP_MS,
+  formatLoopInterval,
+  nextLoopId,
+  parseLoopCommand,
+  parseLoopInterval,
+} from "./loop.js";
 
 describe("parseLoopInterval", () => {
   it("parses s/m/h/d", () => {
@@ -32,5 +39,23 @@ describe("parseLoopCommand", () => {
     const r = parseLoopCommand("/loop 1s too fast");
     expect(r.op).toBe("usage");
     expect(formatLoopInterval(MIN_LOOP_MS)).toBe("15s");
+  });
+
+  it("rejects intervals that would overflow setInterval", () => {
+    const r = parseLoopCommand("/loop 25d say ping");
+    expect(r).toMatchObject({ op: "usage" });
+    expect(parseLoopInterval("25d")).toBeNull();
+    expect(parseLoopInterval("24h")).toBe(MAX_LOOP_MS);
+    expect(parseLoopCommand("/loop 1d tick")).toMatchObject({ op: "start", intervalMs: MAX_LOOP_MS });
+  });
+});
+
+describe("nextLoopId", () => {
+  it("never reuses an id after stop", () => {
+    const seq = { current: 0 };
+    expect(nextLoopId(seq)).toBe("l1");
+    expect(nextLoopId(seq)).toBe("l2");
+    // stop l1 — seq is monotonic so the next start is l3, not a second l2
+    expect(nextLoopId(seq)).toBe("l3");
   });
 });

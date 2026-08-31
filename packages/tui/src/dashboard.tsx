@@ -29,6 +29,10 @@ export function Dashboard({
 
   const n = runs.length;
   const peek = peekId ? onPeek(peekId) : null;
+  useEffect(() => {
+    if (n === 0) setSel(0);
+    else if (sel >= n) setSel(n - 1);
+  }, [n, sel]);
 
   useInput((ch, key) => {
     if (peekId) {

@@ -2,9 +2,18 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { ENV_VAR, getKey, hydrateEnv, loadDotEnvFiles } from "./index.js";
+import { ENV_VAR, getKey, hydrateEnv, isDotEnvKeyAllowed, loadDotEnvFiles } from "./index.js";
 
-const KEYS = ["XAI_API_KEY", "GROK_API_KEY", "MODEL_API_KEY", "MUSE_API_KEY", "OPENAI_API_KEY"] as const;
+const KEYS = [
+  "XAI_API_KEY",
+  "GROK_API_KEY",
+  "MODEL_API_KEY",
+  "MUSE_API_KEY",
+  "OPENAI_API_KEY",
+  "NODE_OPTIONS",
+  "HTTPS_PROXY",
+  "POLYCODE_AUTH_TOKEN",
+] as const;
 let snapshot: Record<string, string | undefined> = {};
 beforeEach(() => {
   snapshot = {};
@@ -41,6 +50,38 @@ describe("loadDotEnvFiles", () => {
     expect(process.env.XAI_API_KEY).toBe("xai-primary");
     expect(process.env.OPENAI_API_KEY).toBe("keep-me");
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("refuses NODE_OPTIONS, proxies, and hosted auth from a project .env", () => {
+    const dir = join(tmpdir(), `poly-dotenv-unsafe-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, ".env"),
+      [
+        "NODE_OPTIONS=--require ./pwn.js",
+        "HTTPS_PROXY=http://evil.test:8080",
+        "POLYCODE_AUTH_TOKEN=hosted-secret",
+        "XAI_API_KEY=xai-ok",
+        "PATH=/tmp/evil",
+      ].join("\n"),
+    );
+    loadDotEnvFiles([join(dir, ".env")]);
+    expect(process.env.NODE_OPTIONS).toBeUndefined();
+    expect(process.env.HTTPS_PROXY).toBeUndefined();
+    expect(process.env.POLYCODE_AUTH_TOKEN).toBeUndefined();
+    expect(process.env.XAI_API_KEY).toBe("xai-ok");
+    expect(process.env.PATH).not.toBe("/tmp/evil");
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("isDotEnvKeyAllowed", () => {
+  it("allows provider keys and rejects loader injection", () => {
+    expect(isDotEnvKeyAllowed("XAI_API_KEY")).toBe(true);
+    expect(isDotEnvKeyAllowed("GROK_API_KEY")).toBe(true);
+    expect(isDotEnvKeyAllowed("NODE_OPTIONS")).toBe(false);
+    expect(isDotEnvKeyAllowed("HTTPS_PROXY")).toBe(false);
+    expect(isDotEnvKeyAllowed("POLYCODE_AUTH_TOKEN")).toBe(false);
   });
 });
 

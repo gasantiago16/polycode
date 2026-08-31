@@ -102,6 +102,40 @@ describe("PermissionEngine", () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 
+  it("forkSilent acceptEdits auto-allows dangerous tools without prompting", async () => {
+    const prompt = vi.fn(async () => "deny" as const);
+    const silent = new PermissionEngine("acceptEdits", prompt).forkSilent();
+    expect(silent.isSilent()).toBe(true);
+    expect((await silent.check(tool("write", "mutating"), { path: "a.ts" })).allow).toBe(true);
+    expect((await silent.check(tool("bash", "dangerous"), { command: "npm test" })).allow).toBe(true);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("forkSilent ask becomes plan and cannot prompt", async () => {
+    const prompt = vi.fn(async () => "once" as const);
+    const silent = new PermissionEngine("ask", prompt).forkSilent();
+    expect(silent.getMode()).toBe("plan");
+    expect((await silent.check(tool("write", "mutating"), { path: "a.ts" })).allow).toBe(false);
+    expect((await silent.check(tool("bash", "dangerous"), { command: "ls" })).allow).toBe(false);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("invalidatePrompts denies an in-flight prompt", async () => {
+    let release!: (c: PermissionChoice) => void;
+    const prompt = vi.fn(
+      () =>
+        new Promise<PermissionChoice>((r) => {
+          release = r;
+        }),
+    );
+    const engine = new PermissionEngine("ask", prompt);
+    const pending = engine.check(tool("write", "mutating"), { path: "a.ts" });
+    await vi.waitFor(() => expect(prompt).toHaveBeenCalled());
+    engine.invalidatePrompts();
+    release("once");
+    expect(await pending).toEqual({ allow: false, reason: "background child cannot prompt" });
+  });
+
   it("allows .polycode/memory.md the same way as reviews", async () => {
     const prompt = vi.fn(async () => "once" as const);
     const engine = new PermissionEngine("ask", prompt);

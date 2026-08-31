@@ -15,6 +15,7 @@ import {
   compactCostUsd,
   parseLoopCommand,
   formatLoopInterval,
+  nextLoopId,
   type CanonicalMessage,
   collectGitDiff,
   parseReviewVerdict,
@@ -177,7 +178,6 @@ export function App({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  busyRef.current = busy;
   const demoteRef = useRef(false);
   const [elapsed, setElapsed] = useState(0);
   const [verb, setVerb] = useState<string>(WORK_VERBS[0]);
@@ -185,7 +185,7 @@ export function App({
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [dashTick, setDashTick] = useState(0);
+  const [dashRuns, setDashRuns] = useState<ChildRun[]>([]);
   const [exitHint, setExitHint] = useState(false);
   const [modelLabel, setModelLabel] = useState(`${provider.id}:${provider.model}`);
   const [mode, setMode] = useState<PermissionMode>("ask");
@@ -333,6 +333,21 @@ export function App({
   const lastCtrlC = useRef(0);
   const booted = useRef(false);
   const loopsRef = useRef<Array<{ id: string; intervalMs: number; prompt: string; timer: ReturnType<typeof setInterval>; fires: number }>>([]);
+  const loopSeqRef = useRef(0);
+
+  const acquireBusy = (): boolean => {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    return true;
+  };
+  const releaseBusy = () => {
+    busyRef.current = false;
+    setBusy(false);
+  };
+  const refreshDash = useCallback(() => {
+    setDashRuns(agentRef.current.listChildren());
+  }, []);
 
   // elapsed-time ticker while busy
   useEffect(() => {
@@ -434,13 +449,15 @@ export function App({
 
   useInput(
     (ch, key) => {
-      if (key.ctrl && (ch === "\\" || ch === "|")) setShowDashboard((v) => !v);
+      if (key.ctrl && (ch === "\\" || ch === "|")) {
+        setDashRuns(agentRef.current.listChildren());
+        setShowDashboard((v) => !v);
+      }
     },
     { isActive: !perm && !showSettings },
   );
 
   const drive = async (signal: AbortSignal) => {
-    setBusy(true);
     const paint = createPaintBuffer((chunk) => appendAssistant(chunk), 100);
     try {
       for await (const ev of agentRef.current.run(signal)) {
@@ -492,7 +509,6 @@ export function App({
       paint.flush();
       const demoted = demoteRef.current;
       demoteRef.current = false;
-      setBusy(false);
       commit();
       const history = agentRef.current.history() as CanonicalMessage[];
       if ((!signal.aborted || demoted) && isResumable(history)) persist();
@@ -506,29 +522,33 @@ export function App({
   };
 
   const kickTurn = async (text: string, loopId?: string) => {
-    if (busyRef.current) return;
-    const shown = loopId ? `[${loopId}] ${text}` : text;
-    add({ kind: "user", text: shown });
-    if (autoRoute && route) {
-      try {
-        const r = await route(text);
-        switchTo(r.provider, r.label);
-        add({ kind: "system", text: `routed → ${r.tier} (${r.label})` });
-      } catch (e) {
-        add({ kind: "error", text: `route failed: ${String(e)}` });
+    if (!acquireBusy()) return;
+    try {
+      const shown = loopId ? `[${loopId}] ${text}` : text;
+      add({ kind: "user", text: shown });
+      if (autoRoute && route) {
+        try {
+          const r = await route(text);
+          switchTo(r.provider, r.label);
+          add({ kind: "system", text: `routed → ${r.tier} (${r.label})` });
+        } catch (e) {
+          add({ kind: "error", text: `route failed: ${String(e)}` });
+        }
       }
+      commit();
+      setVerb(WORK_VERBS[Math.floor(Math.random() * WORK_VERBS.length)]);
+      const expanded = await expandUserMessage(text, sandbox);
+      const blocked = await agentRef.current.submitPrompt(expanded.text, expanded.extras);
+      if (blocked.blocked) {
+        add({ kind: "error", text: `prompt blocked: ${blocked.reason}` });
+        return;
+      }
+      const controller = new AbortController();
+      abortRef.current = controller;
+      await drive(controller.signal);
+    } finally {
+      releaseBusy();
     }
-    commit();
-    setVerb(WORK_VERBS[Math.floor(Math.random() * WORK_VERBS.length)]);
-    const expanded = await expandUserMessage(text, sandbox);
-    const blocked = await agentRef.current.submitPrompt(expanded.text, expanded.extras);
-    if (blocked.blocked) {
-      add({ kind: "error", text: `prompt blocked: ${blocked.reason}` });
-      return;
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    await drive(controller.signal);
   };
   const kickTurnRef = useRef(kickTurn);
   kickTurnRef.current = kickTurn;
@@ -543,7 +563,7 @@ export function App({
       await agentRef.current.endSession();
       return exit();
     }
-    if (busy) return; // a turn is streaming — ignore other submits (esc to interrupt)
+    if (busyRef.current) return; // a turn is streaming — ignore other submits (esc to interrupt)
     if (v && historyRef.current[historyRef.current.length - 1] !== v) historyRef.current.push(v);
     histIdx.current = -1;
     if (v === "/help" || v === "/") {
@@ -551,6 +571,7 @@ export function App({
       return;
     }
     if (v === "/dashboard" || v === "/agents") {
+      setDashRuns(agentRef.current.listChildren());
       setShowDashboard(true);
       return;
     }
@@ -602,7 +623,7 @@ export function App({
         add({ kind: "error", text: "too many loops (max 4) · /loop stop" });
         return;
       }
-      const id = `l${loopsRef.current.length + 1}`;
+      const id = nextLoopId(loopSeqRef);
       const timer = setInterval(() => {
         const job = loopsRef.current.find((j) => j.id === id);
         if (!job || busyRef.current) return;
@@ -658,26 +679,31 @@ export function App({
       return;
     }
     if (v === "/review" || v === "/cranky") {
-      const diff = await collectGitDiff(sandbox);
-      if (!diff) {
-        add({ kind: "system", text: "cranky: no local git changes to review" });
-        return;
+      if (!acquireBusy()) return;
+      try {
+        const diff = await collectGitDiff(sandbox);
+        if (!diff) {
+          add({ kind: "system", text: "cranky: no local git changes to review" });
+          return;
+        }
+        const path = `.polycode/reviews/${new Date().toISOString().replace(/[:.]/g, "-")}.md`;
+        add({ kind: "system", text: `cranky review → ${path}` });
+        const result = await agentRef.current.spawnChild({
+          description: "cranky review",
+          subagent_type: "review",
+          prompt: `Review the git diff below. Write the full review markdown to ${path}.\n\n${diff}`,
+        });
+        const vrd = parseReviewVerdict(result.output);
+        add({
+          kind: result.isError ? "error" : "system",
+          text: result.isError
+            ? result.output
+            : `cranky ${vrd.verdict} · ${vrd.bugs} bugs, ${vrd.suggestions} suggestions, ${vrd.nits} nits`,
+        });
+        persist();
+      } finally {
+        releaseBusy();
       }
-      const path = `.polycode/reviews/${new Date().toISOString().replace(/[:.]/g, "-")}.md`;
-      add({ kind: "system", text: `cranky review → ${path}` });
-      const result = await agentRef.current.spawnChild({
-        description: "cranky review",
-        subagent_type: "review",
-        prompt: `Review the git diff below. Write the full review markdown to ${path}.\n\n${diff}`,
-      });
-      const vrd = parseReviewVerdict(result.output);
-      add({
-        kind: result.isError ? "error" : "system",
-        text: result.isError
-          ? result.output
-          : `cranky ${vrd.verdict} · ${vrd.bugs} bugs, ${vrd.suggestions} suggestions, ${vrd.nits} nits`,
-      });
-      persist();
       return;
     }
     if (v === "/explore" || v.startsWith("/explore ")) {
@@ -686,13 +712,18 @@ export function App({
         add({ kind: "system", text: "usage: /explore <question>" });
         return;
       }
-      add({ kind: "system", text: `explore: ${q}` });
-      const result = await agentRef.current.spawnChild({
-        description: "explore",
-        subagent_type: "explore",
-        prompt: q,
-      });
-      add({ kind: result.isError ? "error" : "assistant", text: result.output });
+      if (!acquireBusy()) return;
+      try {
+        add({ kind: "system", text: `explore: ${q}` });
+        const result = await agentRef.current.spawnChild({
+          description: "explore",
+          subagent_type: "explore",
+          prompt: q,
+        });
+        add({ kind: result.isError ? "error" : "assistant", text: result.output });
+      } finally {
+        releaseBusy();
+      }
       return;
     }
     if (v === "/hooks") {
@@ -781,6 +812,7 @@ export function App({
           .replace(/^-|-$/g, "")
           .slice(0, 48) || name;
       add({ kind: "system", text: `workflow ${wf.name}: ${q || "(no query)"}` });
+      if (!acquireBusy()) return;
       try {
         const host = hostFromSpawn((job) => agentRef.current.spawnChild(job));
         const { synthesis, parts } = await runWorkflowFile(host, wf, vars);
@@ -788,6 +820,8 @@ export function App({
         add({ kind: synthesis?.isError ? "error" : "assistant", text });
       } catch (e) {
         add({ kind: "error", text: String(e) });
+      } finally {
+        releaseBusy();
       }
       persist();
       return;
@@ -861,6 +895,7 @@ export function App({
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-|-$/g, "")
           .slice(0, 48) || "task";
+      if (!acquireBusy()) return;
       try {
         const host = hostFromSpawn((job) => agentRef.current.spawnChild(job));
         const { synthesis, parts } = await runWorkflowFile(host, teamWorkflow(), { query: q, slug });
@@ -869,6 +904,8 @@ export function App({
         add({ kind: synthesis?.isError ? "error" : "assistant", text });
       } catch (e) {
         add({ kind: "error", text: String(e) });
+      } finally {
+        releaseBusy();
       }
       persist();
       return;
@@ -881,12 +918,15 @@ export function App({
       }
       add({ kind: "system", text: `deep-research: ${q}` });
       const slug = q.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "query";
+      if (!acquireBusy()) return;
       try {
         const host = hostFromSpawn((job) => agentRef.current.spawnChild(job));
         const { synthesis } = await runWorkflowFile(host, deepResearchWorkflow(), { query: q, slug });
         add({ kind: synthesis?.isError ? "error" : "assistant", text: synthesis?.output ?? "(no synthesis)" });
       } catch (e) {
         add({ kind: "error", text: String(e) });
+      } finally {
+        releaseBusy();
       }
       persist();
       return;
@@ -899,17 +939,22 @@ export function App({
         add({ kind: "error", text: `skill ${skillHit.name} failed to expand` });
         return;
       }
-      add({ kind: "user", text: v });
-      commit();
-      setVerb(WORK_VERBS[Math.floor(Math.random() * WORK_VERBS.length)]);
-      const blocked = await agentRef.current.submitPrompt(body);
-      if (blocked.blocked) {
-        add({ kind: "error", text: `prompt blocked: ${blocked.reason}` });
-        return;
+      if (!acquireBusy()) return;
+      try {
+        add({ kind: "user", text: v });
+        commit();
+        setVerb(WORK_VERBS[Math.floor(Math.random() * WORK_VERBS.length)]);
+        const blocked = await agentRef.current.submitPrompt(body);
+        if (blocked.blocked) {
+          add({ kind: "error", text: `prompt blocked: ${blocked.reason}` });
+          return;
+        }
+        const controller = new AbortController();
+        abortRef.current = controller;
+        await drive(controller.signal);
+      } finally {
+        releaseBusy();
       }
-      const controller = new AbortController();
-      abortRef.current = controller;
-      await drive(controller.signal);
       return;
     }
     if (v === "/cost") {
@@ -958,6 +1003,7 @@ export function App({
       }
       const [imgPath, ...capParts] = rest.split(/\s+/);
       const caption = capParts.join(" ").trim() || `See attached image (${imgPath}).`;
+      if (!acquireBusy()) return;
       try {
         const image = await loadImagePart(imgPath, sandbox);
         add({ kind: "user", text: `${caption} [image ${image.path}]` });
@@ -977,6 +1023,8 @@ export function App({
         await drive(controller.signal);
       } catch (e) {
         add({ kind: "error", text: String(e) });
+      } finally {
+        releaseBusy();
       }
       return;
     }
@@ -993,20 +1041,21 @@ export function App({
     if (v === "/deep-research-review" || v.startsWith("/deep-research-review ")) {
       const target = v.slice("/deep-research-review".length).trim() || "the current design / claims";
       add({ kind: "system", text: `deep-research-review: ${target}` });
-      const extract = await agentRef.current.spawnChild({
-        description: "extract claims",
-        subagent_type: "explore",
-        prompt: `Read ${target} if it is a path, else use the user framing. Extract numbered atomic testable claims (C1, C2, …). Return at most 8.`,
-      });
-      const review = await agentRef.current.spawnChild({
-        description: "refute claims",
-        subagent_type: "researcher",
-        prompt: `For each claim below, try to REFUTE it with web_search + web_fetch primaries. Verdict holds | holds-with-caveat | fails | unknown. Cite URLs.\n\n${extract.output}`,
-      });
-      const path = `.polycode/reviews/research-review-${Date.now()}.md`;
-      add({ kind: "user", text: v });
-      commit();
-      {
+      if (!acquireBusy()) return;
+      try {
+        const extract = await agentRef.current.spawnChild({
+          description: "extract claims",
+          subagent_type: "explore",
+          prompt: `Read ${target} if it is a path, else use the user framing. Extract numbered atomic testable claims (C1, C2, …). Return at most 8.`,
+        });
+        const review = await agentRef.current.spawnChild({
+          description: "refute claims",
+          subagent_type: "researcher",
+          prompt: `For each claim below, try to REFUTE it with web_search + web_fetch primaries. Verdict holds | holds-with-caveat | fails | unknown. Cite URLs.\n\n${extract.output}`,
+        });
+        const path = `.polycode/reviews/research-review-${Date.now()}.md`;
+        add({ kind: "user", text: v });
+        commit();
         const blocked = await agentRef.current.submitPrompt(
           `Write ANNOTATED bibliography + fidelity scorecard to ${path} from these notes. Lead with what died vs survived.\n\n## Claims\n${extract.output}\n\n## Research\n${review.output}`,
         );
@@ -1014,10 +1063,12 @@ export function App({
           add({ kind: "error", text: `prompt blocked: ${blocked.reason}` });
           return;
         }
+        const controller = new AbortController();
+        abortRef.current = controller;
+        await drive(controller.signal);
+      } finally {
+        releaseBusy();
       }
-      const controller = new AbortController();
-      abortRef.current = controller;
-      await drive(controller.signal);
       return;
     }
     if (v === "/context") {
@@ -1167,14 +1218,13 @@ export function App({
         <Help skills={skills} onClose={() => setShowHelp(false)} />
       ) : showDashboard ? (
         <Dashboard
-          key={dashTick}
-          runs={agentRef.current.listChildren()}
+          runs={dashRuns}
           personas={personas}
-          onRefresh={() => setDashTick((n) => n + 1)}
+          onRefresh={refreshDash}
           onKill={(id) => {
             const r = agentRef.current.killChild(id);
             add({ kind: "system", text: r.output });
-            setDashTick((n) => n + 1);
+            refreshDash();
           }}
           onPeek={(id) => agentRef.current.peekChild(id)}
           onAttach={(id) => {

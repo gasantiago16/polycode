@@ -385,6 +385,48 @@ describe("Agent", () => {
     expect(agent.history()).toHaveLength(0);
   });
 
+  it("stamps worktree isolation on tool_call before the UI sees the call", async () => {
+    const task: ToolSpec = {
+      name: "task",
+      description: "task",
+      parameters: {},
+      permission: "mutating",
+      parallelSafe: false,
+      async run(input: { description: string; prompt: string }, ctx) {
+        if (!ctx.spawnChild) return { output: "no spawn", isError: true };
+        return ctx.spawnChild({ ...input, subagent_type: "general" });
+      },
+    };
+    const provider = new ScriptedProvider([
+      [
+        {
+          type: "tool_call",
+          call: { type: "tool_call", id: "1", name: "task", input: { description: "a", prompt: "a" } },
+        },
+        {
+          type: "tool_call",
+          call: { type: "tool_call", id: "2", name: "task", input: { description: "b", prompt: "b" } },
+        },
+        { type: "stop", reason: "tool_use" },
+      ],
+      [{ type: "text_delta", text: "ca" }, { type: "stop", reason: "end_turn" }],
+      [{ type: "text_delta", text: "cb" }, { type: "stop", reason: "end_turn" }],
+      [{ type: "text_delta", text: "parent" }, { type: "stop", reason: "end_turn" }],
+    ]);
+    const agent = new Agent(provider, [task], new PermissionEngine("yolo", async () => "once"), {
+      sandbox,
+      openWorktree: async () => ({ sandbox, path: "/tmp/wt-stamp" }),
+    });
+    agent.pushUser("go");
+    const events = await collect(agent);
+    const calls = events.filter((e) => e.type === "tool_call");
+    expect(calls).toHaveLength(2);
+    for (const ev of calls) {
+      if (ev.type !== "tool_call") continue;
+      expect((ev.call.input as { isolation?: string }).isolation).toBe("worktree");
+    }
+  });
+
   it("records worktree paths from spawnChild", async () => {
     const provider = new ScriptedProvider([
       [{ type: "text_delta", text: "ok" }, { type: "stop", reason: "end_turn" }],

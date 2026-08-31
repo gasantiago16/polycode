@@ -10,6 +10,7 @@
     "dev": "tsx packages/cli/src/index.ts",
     "serve": "tsx packages/cli/src/index.ts --serve",
     "smoke": "tsx scripts/smoke.ts",
+    "beta": "tsx scripts/beta-log.ts",
     "route-check": "tsx scripts/route-check.ts",
     "test": "vitest run",
     "test:watch": "vitest",
