@@ -1,0 +1,11 @@
+{
+  "$comment": "Copy to .polycode/lsp.json. Commands must be on PATH. The lsp tool is not added unless at least one server is configured.",
+  "servers": [
+    {
+      "language": "typescript",
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx"]
+    }
+  ]
+}

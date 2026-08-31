@@ -8,7 +8,7 @@ import { theme } from "./theme.js";
  * streaming assistant output; not a full CommonMark implementation.
  */
 export function Markdown({ text }: { text: string }) {
-  const blocks = parse(text);
+  const blocks = parseMarkdown(text);
   return (
     <Box flexDirection="column">
       {blocks.map((b, i) =>
@@ -16,9 +16,11 @@ export function Markdown({ text }: { text: string }) {
           <Box
             key={i}
             flexDirection="column"
-            borderStyle="round"
-            borderColor="gray"
-            paddingX={1}
+            // Open fences (still streaming) must not use a round border — growing
+            // bordered boxes reflow the live region every token.
+            borderStyle={b.open ? undefined : "round"}
+            borderColor={b.open ? undefined : "gray"}
+            paddingX={b.open ? 0 : 1}
           >
             {(b.lines.length ? b.lines : [" "]).map((l, j) => (
               <Text key={j} color={theme.code}>
@@ -34,9 +36,10 @@ export function Markdown({ text }: { text: string }) {
   );
 }
 
-type Block = { type: "text"; text: string } | { type: "code"; lines: string[] };
+type Block = { type: "text"; text: string } | { type: "code"; lines: string[]; open?: boolean };
 
-function parse(text: string): Block[] {
+/** Exported for UX tests. */
+export function parseMarkdown(text: string): Block[] {
   const out: Block[] = [];
   const lines = text.split("\n");
   let inCode = false;
@@ -55,7 +58,7 @@ function parse(text: string): Block[] {
     if (inCode) code.push(line);
     else out.push({ type: "text", text: line });
   }
-  if (inCode) out.push({ type: "code", lines: code });
+  if (inCode) out.push({ type: "code", lines: code, open: true });
   return out;
 }
 

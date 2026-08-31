@@ -42,7 +42,8 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Security &amp; Keys</h1>
 <h2>Key storage</h2>
@@ -111,7 +112,20 @@ so the AI SDK provider factory — which reads env — can see them.</p>
 <td>allow</td>
 </tr>
 </tbody></table>
-<p>Use <code>yolo</code> only in sandboxes / CI.</p>
+<p>Deny rules and protected paths (<code>.env</code> / <code>.git</code> / <code>.ssh</code> / <code>.polycode</code>) run <strong>before</strong> the
+safe-class short-circuit, so <code>Read(.env)</code> is refused even though <code>read</code> is <code>safe</code>. Use
+<code>yolo</code> only in sandboxes / CI — the sandbox still jails those paths.</p>
+<h2>No npmjs publish, no registry MCP</h2>
+<p>This workspace is <code>private</code>. There is no <code>npm publish</code> path. Ship the tsup bundle or the
+Docker image from git.</p>
+<p>MCP stdio servers must be a <strong>local</strong> command (<code>node ./mcp/foo.js</code>, a venv binary, …).
+<code>npx</code>/<code>npm</code>/<code>pnpm</code>/<code>yarn</code>/<code>bunx</code> are rejected at connect so a checked-in <code>mcp.json</code> cannot
+pull and execute a public package. HTTP MCP (<code>url</code>) is DNS-checked the same way as
+<code>web_fetch</code> (no private/loopback/metadata) and still goes through the permission engine.</p>
+<h2>Secret redaction</h2>
+<p>Tool outputs are scrubbed for <code>sk-</code> / <code>xai-</code> / <code>sk-ant-</code> / Google <code>AIza</code> / GitHub <code>ghp_</code> /
+<code>Bearer</code> tokens, <code>*_API_KEY=</code> assignments, and PEM private keys <strong>before</strong> they enter
+model history. This is leak-prevention for both logs and training-tier vendors.</p>
 <h2>Tool path safety</h2>
 <p>Tools never touch Node&#39;s <code>fs</code>/<code>child_process</code> directly — all I/O goes through a <code>Sandbox</code>
 (in <code>@polycode/core</code>). File ops are path-jailed to the project root (<code>..</code> traversal is
@@ -129,22 +143,40 @@ exit.</li>
 <p>Select it:</p>
 <pre><code class="language-powershell">corepack pnpm dev -- --sandbox docker          # or set &quot;sandbox&quot;: { &quot;kind&quot;: &quot;docker&quot; } in config
 </code></pre>
-<p>If Docker isn&#39;t available, the CLI <strong>prints a warning and falls back to <code>local</code></strong> so the
-app still runs. Config knobs: <code>image</code> (default <code>node:22-alpine</code>), <code>network</code> (default
-<code>false</code>), <code>memory</code> (default <code>1g</code>).</p>
+<p>If <code>kind</code> is <code>docker</code> (or you pass <code>--sandbox docker</code>) and Docker isn&#39;t available, the CLI
+<strong>fails closed</strong> — it does not silently fall back to <code>local</code>. Config knobs: <code>image</code>
+(default <code>node:22-alpine</code>), <code>network</code> (default <code>false</code>), <code>memory</code> (default <code>1g</code>).</p>
+<p>File tools and <code>sandbox.walk</code> refuse <code>.env</code> / <code>.env.*</code> / <code>.git</code> / <code>.ssh</code> / <code>.polycode</code>
+(except <code>memory.md</code> and <code>reviews/</code>). <code>bash</code> commands that name those paths are refused even
+in <code>yolo</code>. Child processes (bash, MCP stdio, LSP, git worktrees, hooks, statusLine) get
+<code>process.env</code> with <code>*_KEY</code> / <code>*_TOKEN</code> / <code>*_SECRET</code> / <code>POLYCODE_AUTH_TOKEN*</code> stripped.</p>
 <p><strong>Design note:</strong> the sandbox isolates the <em>execution</em> surface (arbitrary shell), which is
 the real risk. It does <strong>not</strong> isolate file edits from the project — that&#39;s intentional, so
 the agent&#39;s changes apply where you want them. For fully untrusted use where edits must be
-quarantined too, run on a disposable copy of the repo.</p>
-<h2>Hosted-mode caveats (before exposing the server)</h2>
-<p>The scaffold server runs tools in <code>yolo</code> mode, contained by the sandbox you pass it (use a
-<code>docker</code> sandbox there). <strong>Still required before real deployment:</strong></p>
+quarantined too, run on a disposable copy of the repo (or a git worktree).</p>
+<h2>Hosted mode</h2>
+<p><code>GET /health</code> and <code>/ready</code> stay public. Set <code>&quot;hosted&quot;: { &quot;trustProxy&quot;: true }</code> only behind
+a trusted reverse proxy (<code>X-Forwarded-For</code>). Bind <code>127.0.0.1</code> locally; Docker images listen
+on <code>0.0.0.0</code>. <code>poly --serve</code> is not a yolo scaffold:</p>
 <ul>
-<li>Per-request authentication and per-session permission policy.</li>
-<li>A <code>docker</code> (or stronger) sandbox — don&#39;t expose a <code>local</code> sandbox to untrusted input.</li>
-<li>Rate limiting and audit logging.</li>
+<li><strong>Auth</strong> — <code>POLYCODE_AUTH_TOKEN</code> (and optional comma-separated <code>POLYCODE_AUTH_TOKENS</code>),
+each at least 16 characters. Clients send <code>Authorization: Bearer</code> or <code>X-Api-Key</code>.
+Compare is SHA-256 + <code>timingSafeEqual</code>. <code>--insecure</code> skips auth and forces yolo — local
+scaffold only, never company networks.</li>
+<li><strong>Bind</strong> — default <code>127.0.0.1</code>. Binding a non-loopback address without <code>--insecure</code>
+requires a docker sandbox (fail-closed). <code>&quot;profile&quot;: &quot;company&quot;</code> forces docker + non-yolo.</li>
+<li><strong>Permissions</strong> — no interactive prompt. <code>ask</code> becomes <code>plan</code>. <code>yolo</code> is refused unless
+<code>--insecure</code>. Docker defaults to <code>acceptEdits</code>; local defaults to <code>plan</code>.</li>
+<li><strong>Limits</strong> — 1 MB body, 32k message, 5-minute turn abort, per-IP rate + concurrency.
+Failed auth counts toward the window.</li>
+<li><strong>Audit</strong> — <code>.polycode/audit.jsonl</code> records <code>chat</code> / <code>tool</code> / <code>unauthorized</code> /
+<code>rate_limited</code> with <code>requestId</code> — no prompt or tool bodies.</li>
+<li><strong>Sessions</strong> — transcripts omit raw image bytes.</li>
 </ul>
-<p>These are tracked in <a href="continuity.html">Continuity / Handoff</a>.</p>
+<p><code>web_fetch</code> and HTTP MCP URLs are lexical-checked then DNS-resolved; any private /
+loopback / link-local / metadata address is refused. Redirects are not followed.</p>
+<p>Hooks remain user-configured shell (trusted config). They run through the sandbox with
+secret env stripped; a nonzero <code>PreToolUse</code> / <code>UserPromptSubmit</code> denies the call.</p>
 
 <footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
 </main>

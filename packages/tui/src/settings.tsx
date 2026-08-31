@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import { execFile } from "node:child_process";
+import { childProcessEnv } from "@polycode/core";
 import {
   PROVIDERS,
   setKey,
@@ -136,7 +137,7 @@ function openUrl(url: string): void {
     args = [url];
   }
   try {
-    execFile(cmd, args, () => {});
+    execFile(cmd, args, { env: childProcessEnv() }, () => {});
   } catch {
     /* ignore */
   }

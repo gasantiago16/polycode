@@ -42,7 +42,8 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>CLI Reference</h1>
 <h2>Scripts (run via Corepack pnpm)</h2>
@@ -119,11 +120,15 @@
 </tr>
 <tr>
 <td><code>--serve</code></td>
-<td>Start the server instead of the TUI.</td>
+<td>Start the HTTP+SSE server instead of the TUI. Requires <code>POLYCODE_AUTH_TOKEN</code> (≥16 chars) unless <code>--insecure</code>. Non-loopback bind requires docker.</td>
 </tr>
 <tr>
 <td><code>--port &lt;n&gt;</code></td>
 <td>Server port (default 8787).</td>
+</tr>
+<tr>
+<td><code>--host &lt;addr&gt;</code></td>
+<td>Bind address (default <code>127.0.0.1</code>, or <code>0.0.0.0</code> inside Docker).</td>
 </tr>
 <tr>
 <td><code>--continue</code></td>
@@ -136,6 +141,14 @@
 <tr>
 <td><code>--sessions</code></td>
 <td>List saved sessions (id · model · title) and exit.</td>
+</tr>
+<tr>
+<td><code>--models</code></td>
+<td>Print the pinned provider catalog and exit.</td>
+</tr>
+<tr>
+<td><code>--insecure</code></td>
+<td>Hosted mode without bearer auth (local scaffold only). Otherwise <code>POLYCODE_AUTH_TOKEN</code> is required.</td>
 </tr>
 </tbody></table>
 <p>Sessions are stored as <code>&lt;cwd&gt;/.polycode/sessions/&lt;id&gt;.json</code> and saved after each turn.</p>
@@ -158,6 +171,106 @@
 <tr>
 <td><code>/route &lt;auto|off|status&gt;</code></td>
 <td>Toggle per-turn auto-routing (needs <code>--routing model</code> / config).</td>
+</tr>
+<tr>
+<td><code>/compact [focus]</code></td>
+<td>Two-pass context compaction (always runs; auto at 85%).</td>
+</tr>
+<tr>
+<td><code>/context</code></td>
+<td>Token breakdown vs the model window.</td>
+</tr>
+<tr>
+<td><code>/review</code> (<code>/cranky</code>)</td>
+<td>Spawn a depth-1 reviewer child on the local git diff.</td>
+</tr>
+<tr>
+<td><code>/explore &lt;q&gt;</code></td>
+<td>Spawn a read-only explore child.</td>
+</tr>
+<tr>
+<td><code>/skills</code></td>
+<td>List loaded skills (bundled forme, matsumura-style, deep-research).</td>
+</tr>
+<tr>
+<td><code>/mcp</code></td>
+<td>MCP servers from <code>.polycode/mcp.json</code> (fail-soft connect). Notes deferred schemas.</td>
+</tr>
+<tr>
+<td><code>/plugins</code></td>
+<td>Loaded plugin bundles (<code>.polycode/plugins/&lt;name&gt;</code>).</td>
+</tr>
+<tr>
+<td><code>/statusline</code></td>
+<td>Show or set the status-line template (<code>/statusline default</code> resets).</td>
+</tr>
+<tr>
+<td><code>/hooks</code></td>
+<td>List configured lifecycle hooks.</td>
+</tr>
+<tr>
+<td><code>/worktree list</code></td>
+<td>Detached git worktrees under <code>.polycode/worktrees/</code>.</td>
+</tr>
+<tr>
+<td><code>/worktree apply &lt;id&gt;</code></td>
+<td>Copy changed + untracked files from a child worktree onto the parent tree. Does not merge or delete.</td>
+</tr>
+<tr>
+<td><code>/worktree remove &lt;id&gt;</code></td>
+<td><code>git worktree remove --force</code> that tree.</td>
+</tr>
+<tr>
+<td><code>/workflows</code></td>
+<td>Bundled + <code>.polycode/workflows/*.json</code> + <code>~/.config/polycode/workflows/*.json</code>.</td>
+</tr>
+<tr>
+<td><code>/workflow &lt;name&gt; [query]</code></td>
+<td>Run a named JSON workflow (parallel, then sequential <code>steps</code>, then synthesize). Budgeted.</td>
+</tr>
+<tr>
+<td><code>/forme [name]</code></td>
+<td>Skill: FOR{Name}.md + visual HTML (SVG, no image gen).</td>
+</tr>
+<tr>
+<td><code>/matsumura-style [args]</code></td>
+<td>Skill: Matsumura/Sturzinger memo.</td>
+</tr>
+<tr>
+<td><code>/deep-research &lt;q&gt;</code></td>
+<td>Budgeted workflow: 3 researcher children, then a synthesize child writes <code>docs/research/&lt;slug&gt;.md</code>.</td>
+</tr>
+<tr>
+<td><code>/deep-research-review [path]</code></td>
+<td>Extract claims, refute with primaries, write a scorecard.</td>
+</tr>
+<tr>
+<td><code>/cost</code></td>
+<td>Session token ledger × catalog list prices (USD).</td>
+</tr>
+<tr>
+<td><code>/todo</code></td>
+<td>Show the in-memory todo list (<code>todo_write</code> tool).</td>
+</tr>
+<tr>
+<td><code>/memory</code></td>
+<td>Show curated project memory (<code>.polycode/memory.md</code>).</td>
+</tr>
+<tr>
+<td><code>/memory add &lt;note&gt;</code></td>
+<td>Append a dated note (also <code>/memory &lt;note&gt;</code>).</td>
+</tr>
+<tr>
+<td><code>/memory clear</code></td>
+<td>Empty the memory file.</td>
+</tr>
+<tr>
+<td><code>/image &lt;path&gt; [caption]</code></td>
+<td>Attach a local png/jpg/gif/webp and send a turn. <code>@shot.png</code> in a prompt also attaches.</td>
+</tr>
+<tr>
+<td><code>/rewind</code> (<code>/undo</code>)</td>
+<td>Restore files from the last mutating-tool checkpoint and drop that turn.</td>
 </tr>
 <tr>
 <td><code>/settings</code> (or <code>/login</code>)</td>
@@ -199,15 +312,40 @@ class, and the call. Answer with:</p>
 <td><code>POST</code></td>
 <td><code>/chat</code></td>
 <td><code>{&quot;message&quot;: &quot;...&quot;}</code></td>
-<td>SSE: <code>meta</code>, <code>event</code> (AgentUIEvent frames), <code>done</code></td>
+<td>SSE: <code>meta</code>, <code>event</code> (AgentUIEvent frames), <code>done</code>. Auth: <code>Authorization: Bearer</code> or <code>X-Api-Key</code>.</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
 <td><code>/health</code></td>
 <td>—</td>
-<td><code>{&quot;ok&quot;: true}</code></td>
+<td><code>{&quot;ok&quot;: true, &quot;auth&quot;, &quot;mode&quot;}</code> (public)</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/ready</code></td>
+<td>—</td>
+<td>Same as <code>/health</code>.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/ide</code></td>
+<td>—</td>
+<td>IDE bridge: endpoint list (auth).</td>
+</tr>
+<tr>
+<td><code>GET/POST</code></td>
+<td><code>/ide/context</code></td>
+<td><code>{ file, selection, language, diagnostics }</code></td>
+<td>Editor snapshot prepended as <code>&lt;ide&gt;</code> on the next <code>/chat</code>.</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/ide/catalog</code></td>
+<td>—</td>
+<td>Plugins, skills, tool names, agent types.</td>
 </tr>
 </tbody></table>
+<p><code>401</code> unauthorized · <code>413</code> body too large · <code>429</code> rate/concurrency (<code>Retry-After</code>) · <code>x-request-id</code> on every response. Audit lines (no bodies) append to <code>.polycode/audit.jsonl</code>. Hosted permission mode cannot prompt: <code>ask</code> becomes <code>plan</code>; <code>yolo</code> requires <code>--insecure</code>. Docker sandbox defaults to <code>acceptEdits</code>.</p>
 
 <footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
 </main>

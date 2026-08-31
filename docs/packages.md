@@ -5,10 +5,13 @@ provider, transport, or UI.
 
 ```
 cli ─┬─ tui ──┬─ core
-     │         └─ secrets
+     │         ├─ secrets
+     │         └─ workflows ── core
      ├─ providers ── core
      ├─ router ──── providers, core
      ├─ tools ───── core
+     ├─ plugins ─── core, skills
+     ├─ lsp ─────── core
      ├─ sandbox ─── core
      ├─ secrets
      └─ server ──── router, tools, core
@@ -22,6 +25,9 @@ The provider-blind heart. No external deps.
   `StopReason`, `ToolSpec`, `Capabilities`, `GenerateRequest`, `Provider`.
 - `permissions.ts` — `PermissionEngine` + `PermissionMode` (plan/ask/acceptEdits/yolo).
 - `agent.ts` — `Agent` (the loop) emitting `AgentUIEvent`s.
+- `hooks.ts` — lifecycle hook runner (`PreToolUse` deny, `$TOOL_NAME` / `$FILE` / `$PROMPT`, …).
+- `memory.ts` — curated `.polycode/memory.md` read/append/replace.
+- `images.ts` — `@file.png` → `ImagePart` (base64).
 
 ## `@polycode/providers`
 
@@ -47,6 +53,7 @@ The default tool registry (`tools`), each a `ToolSpec` with a permission class:
 | `bash` | dangerous | shell command with timeout |
 | `grep` | safe | regex over file contents |
 | `glob` | safe | simple `*`/`**` file matching |
+| `memory` | mutating | curated `.polycode/memory.md` (`read`/`append`/`replace`) |
 
 ## `@polycode/sandbox`
 
@@ -54,6 +61,8 @@ Tool-execution backends implementing core's `Sandbox`: `LocalSandbox` (host shel
 path-jailed) and `DockerSandbox` (shell in a locked-down container, file ops on the
 bind-mount). `createSandbox({ kind, root, ... })`. See [Security & Keys](security.md).
 `ToolContext` carries a `Sandbox`, so tools do no direct `fs`/`child_process`.
+`addGitWorktree` / `applyGitWorktree` / `listGitWorktrees` / `removeGitWorktree`
+manage detached trees under `.polycode/worktrees/`.
 
 ## `@polycode/secrets`
 
@@ -66,14 +75,30 @@ fallback. See [Security & Keys](security.md).
 Claude-Code-style Ink UI. `Root` orchestrates Settings vs. the app; `Settings` handles keys
 (masked paste · env import · open key page · validate · agentic hook); `App` is the chat loop
 (welcome `Banner`, `⏺`/`⎿` tool rendering, `Markdown` assistant output, bordered composer,
-spinner with elapsed + esc-to-interrupt, status bar, slash commands); `theme.ts` holds the
+spinner with elapsed + esc-to-interrupt, `$token` status line, slash commands); `theme.ts` holds the
 accent/glyph palette. Deps: `ink`, `ink-text-input`, `ink-spinner`, `react`,
 `@polycode/core`, `@polycode/secrets`.
+
+## `@polycode/workflows`
+
+Budgeted TypeScript runner: `runParallel` / `runSequential` / `runWorkflowFile`
+plus JSON loaders (`loadWorkflows`). Host is `spawnChild`. Not Rhai.
+
+## `@polycode/plugins`
+
+`loadPlugins(cwd)` reads `.polycode/plugins/<name>/` and user plugins. A bundle can ship
+skills, slash commands, extra `task` agents, hooks, MCP servers, and LSP server configs.
+
+## `@polycode/lsp`
+
+JSON-RPC stdio client + `createLspTool`. Registered only when `.polycode/lsp.json` or a
+plugin `lsp.json` lists a server. Host-side (not docker-jailed).
 
 ## `@polycode/server`
 
 `startServer()` — Node `http` server exposing the same engine over `POST /chat` (SSE) and
-`GET /health`. Deps: `@polycode/{core,router,tools}`.
+`GET /health`. Bearer / `X-Api-Key`, hosted permission policy, rate limits, body caps,
+audit JSONL, IDE bridge (`/ide/*`). Deps: `@polycode/{core,router,tools}`.
 
 ## `@polycode/cli`
 

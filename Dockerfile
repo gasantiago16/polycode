@@ -1,31 +1,37 @@
-# polycode server image — runs the same agent engine over HTTP+SSE.
+# polycode hosted server — same Agent loop over HTTP+SSE.
 #
 #   docker build -t polycode-server .
-#   docker run --rm -p 8787:8787 -e OPENAI_API_KEY=sk-... polycode-server
+#   docker run --rm -p 8787:8787 \
+#     -e POLYCODE_AUTH_TOKEN=... \
+#     -e OPENAI_API_KEY=sk-... \
+#     -v ${PWD}:/work \
+#     polycode-server
 #
-# Provide provider keys via env (OPENAI_API_KEY / GOOGLE_GENERATIVE_AI_API_KEY /
-# XAI_API_KEY). POST /chat {"message":"..."} streams SSE; GET /health -> {ok}.
+# POST /chat  Authorization: Bearer <token>  {"message":"..."}  (SSE)
+# GET  /health  public
 
-# ---- build: install workspace + bundle the CLI ----
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
 COPY . .
-RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @polycode/cli build
+RUN corepack pnpm install --frozen-lockfile
+RUN corepack pnpm --filter @polycode/cli build
 
-# ---- runtime: only the bundle + its production deps ----
 FROM node:22-alpine AS runtime
 WORKDIR /app
 RUN corepack enable
 COPY --from=build /app/packages/cli/package.json ./package.json
 COPY --from=build /app/packages/cli/dist ./dist
-RUN pnpm install --prod --no-frozen-lockfile
+RUN corepack pnpm install --prod --no-frozen-lockfile \
+  && mkdir -p /work \
+  && chown -R node:node /work
 
 ENV NODE_ENV=production
+ENV POLYCODE_HOST=0.0.0.0
 EXPOSE 8787
-# Tools run in the default (local) sandbox inside the container, which is the
-# isolation boundary. For per-session container isolation, front this with an
-# orchestrator that spawns one container per session.
-ENTRYPOINT ["node", "dist/index.js"]
+WORKDIR /work
+USER node
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["node", "/app/dist/index.js"]
 CMD ["--serve", "--port", "8787"]

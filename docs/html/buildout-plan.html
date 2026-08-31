@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>buildout-plan · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="deploy.html">Build & Deploy</a>
+<a href="roadmap.html">Roadmap</a>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html" class="active">buildout-plan</a></nav>
+<main>
+<h1>polycode Build-out Plan — to Claude-Code-class</h1>
+<blockquote>
+<p>Forward-looking plan (Phases 5+) to take polycode from &quot;basic parity&quot; (Phases 1–4 done)
+to a genuinely useful, Claude-Code-class, <strong>provider-agnostic</strong> coding agent.
+Grounded in a June-2026 code audit + a full Claude Code feature diff + the open-source
+landscape (opencode, Codex, Aider, Cline, Goose, Pi). Read <a href="roadmap.html">roadmap.md</a> for what&#39;s
+already done.</p>
+</blockquote>
+<h2>North Star</h2>
+<p>One provider-blind agent engine that is <strong>as useful as Claude Code for daily coding</strong>, while
+keeping the things that make polycode distinct: true multi-provider routing (cheap/strong/long
+per turn across OpenAI/Gemini/xAI), a hardened sandbox, and a hosted server from the same core.
+Anthropic stays excluded — we match Claude Code&#39;s <em>capabilities</em>, not its provider.</p>
+<p><strong>Design rule for every item below:</strong> it must be provider-agnostic, it must flow through the
+existing seams (canonical types → permission engine → sandbox), and it must degrade gracefully.</p>
+<h2>Where we stand (and our edge)</h2>
+<p>Done (Phases 1–4): context-grounded loop with <code>maxSteps</code>/retry, 8 tools (read/write/edit/
+multi_edit/bash/grep/ls/glob) with a diff <code>display</code> channel, permission engine (plan/ask/
+acceptEdits/yolo) with sticky session grants, no-flicker Ink TUI + token meter, local+docker
+sandbox, per-turn smart routing, secure keychain key flow, session persistence/resume, hosted
+server scaffold, build/distribute (<code>tsup</code> → single <code>poly</code> bin).</p>
+<p><strong>Landscape positioning.</strong> The open-source table stakes in 2026 (opencode @ 172k stars, Codex,
+Aider, Cline, Goose, Pi) are: provider-neutrality + MCP + skills/commands + subagents + a
+sandbox + a good TUI. polycode already has <strong>provider-neutrality + a hardened docker sandbox +
+a polished TUI + automatic cross-provider routing</strong> (most tools <em>don&#39;t</em> auto-route across
+vendors — that&#39;s our differentiator). The gaps to &quot;competitive and useful&quot; are concentrated:
+<strong>MCP, context compaction, subagents, skills/commands, web tools.</strong> Those are this plan&#39;s spine.</p>
+<h2>Phase 5.0 — Pre-flight ground truth (do FIRST, ~0.5 day)</h2>
+<p>Everything downstream (especially compaction, which needs real context-window numbers) rests on
+unverified placeholders. Close that first.</p>
+<ul>
+<li>Verify live model IDs for OpenAI / Gemini / xAI against current provider docs; update
+<code>polycode.config.example.json</code> + <code>providers/src/index.ts</code> defaults.</li>
+<li><strong>Pin</strong> <code>ai</code> + <code>@ai-sdk/*</code> versions in every <code>package.json</code> (currently floating) and re-verify
+the <code>fullStream</code> part names the adapter switches on (<code>ai-sdk-provider.ts</code>) against the pinned
+SDK — AI SDK majors rename stream parts.</li>
+<li>Fill in real <code>Capabilities.contextWindow</code> / <code>maxOutput</code> per model (<code>providers/src/index.ts:14-43</code>)
+— these are flagged &quot;CONFIRM&quot; and are load-bearing for Phase 5.2.</li>
+<li><code>smoke</code> all three providers (only <code>xai:grok-4.3</code> has been run live); <strong>visually run the TUI in a
+real TTY once</strong> (never done — build sessions had no TTY).</li>
+</ul>
+<p><strong>Verify:</strong> three green smokes + one human TUI run.</p>
+<h2>Gap analysis (Claude Code surface → polycode)</h2>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>polycode today</th>
+<th>Leverage</th>
+<th>Phase</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>MCP client</strong> (stdio + HTTP)</td>
+<td>ABSENT</td>
+<td>⭐⭐⭐ unbounded tool surface</td>
+<td>5.1</td>
+</tr>
+<tr>
+<td><strong>Context compaction / auto-summarize</strong></td>
+<td>ABSENT (history unbounded → hard-fails)</td>
+<td>⭐⭐⭐ correctness, not polish</td>
+<td>5.2</td>
+</tr>
+<tr>
+<td><strong>Subagents / Task tool</strong></td>
+<td>ABSENT</td>
+<td>⭐⭐⭐ big-codebase work, context isolation</td>
+<td>5.3</td>
+</tr>
+<tr>
+<td><strong>Custom commands + Skills</strong></td>
+<td>hardcoded if-chain</td>
+<td>⭐⭐⭐ extensibility-by-convention</td>
+<td>5.4</td>
+</tr>
+<tr>
+<td><strong>Web tools</strong> (WebFetch/WebSearch)</td>
+<td>ABSENT</td>
+<td>⭐⭐ cheap, extends context</td>
+<td>5.5</td>
+</tr>
+<tr>
+<td><strong>Todo / task tracking</strong></td>
+<td>ABSENT</td>
+<td>⭐⭐ keeps long tasks on-track</td>
+<td>5.5</td>
+</tr>
+<tr>
+<td><strong>Permission allow/deny rules</strong></td>
+<td>mode + per-tool sticky only</td>
+<td>⭐⭐ kills prompt fatigue</td>
+<td>6.1</td>
+</tr>
+<tr>
+<td><strong>Hooks</strong> (Pre/PostToolUse, Session*)</td>
+<td>ABSENT</td>
+<td>⭐⭐ policy/automation (auto-format, audit)</td>
+<td>6.2</td>
+</tr>
+<tr>
+<td><strong>Checkpoints / rewind (Esc-Esc)</strong></td>
+<td>ABSENT</td>
+<td>⭐⭐ safety, reversible experiments</td>
+<td>6.3</td>
+</tr>
+<tr>
+<td><strong>settings.json hierarchy</strong></td>
+<td>single config file</td>
+<td>⭐ team/user/local layering</td>
+<td>6.1</td>
+</tr>
+<tr>
+<td><strong>Memory write-back + <code>/memory</code></strong></td>
+<td>reads CLAUDE.md once</td>
+<td>⭐ cross-session learning</td>
+<td>6.4</td>
+</tr>
+<tr>
+<td><strong>@-file mentions</strong></td>
+<td>ABSENT</td>
+<td>⭐ fast context inclusion</td>
+<td>7.1</td>
+</tr>
+<tr>
+<td><strong>Image / multimodal input</strong></td>
+<td>ABSENT at loop level</td>
+<td>⭐ &quot;fix this screenshot&quot;</td>
+<td>7.2</td>
+</tr>
+<tr>
+<td><strong><code>/context</code> + <code>/cost</code> + status-line</strong></td>
+<td>basic token meter</td>
+<td>⭐ observability</td>
+<td>7.3</td>
+</tr>
+<tr>
+<td><strong>Server hardening</strong> (auth/rate-limit/policy)</td>
+<td>yolo scaffold</td>
+<td>⭐ deployability</td>
+<td>8</td>
+</tr>
+<tr>
+<td><strong>IDE / hosted surfaces / plugins / LSP</strong></td>
+<td>none</td>
+<td>later</td>
+<td>9</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Phase 5.1 — MCP client (the force multiplier) ⭐⭐⭐</h2>
+<p><strong>Why first of the big rocks:</strong> one feature turns polycode&#39;s fixed 8-tool surface into the entire
+MCP ecosystem (GitHub, Postgres, Slack, filesystem, Brave, thousands of community servers). It is
+<em>the</em> defining Claude-Code-class capability, and the Vercel AI SDK — which polycode already
+depends on — ships <code>experimental_createMCPClient</code> with automatic MCP→tool conversion and a stdio
+transport, so we lean on the SDK for the protocol work instead of hand-rolling it.</p>
+<p><strong>Build:</strong></p>
+<ul>
+<li>New <code>packages/mcp</code>: read MCP server config from a scope hierarchy (<code>.polycode/mcp.json</code> local &gt;
+project &gt; <code>~/.config/polycode/mcp.json</code> user), connect each server (stdio child process or
+Streamable HTTP), call <code>client.tools()</code>.</li>
+<li><strong>Wrap each MCP tool as a canonical <code>ToolSpec</code></strong> (<code>core/types.ts:101</code>): name
+<code>mcp__&lt;server&gt;__&lt;tool&gt;</code>, schema from the server&#39;s <code>inputSchema</code>, <code>permission: &quot;dangerous&quot;</code> by
+default (overridable per-server in config: a trusted server can be <code>mutating</code>/<code>safe</code>),
+<code>parallelSafe: false</code>, and <code>run(input)</code> = <code>await mcpTool.execute(input)</code> normalized to
+<code>ToolRunResult</code>. <strong>This is the whole point of the clean seam:</strong> MCP tools become first-class
+ToolSpecs and flow through the <em>same</em> permission engine as native tools — no special-casing in
+the loop.</li>
+<li>Merge the dynamic ToolSpecs into the tools array at the existing seam (<code>cli/index.ts:148</code>,
+<code>server/src/index.ts:39</code>). Connect on startup, <code>dispose()</code> on exit, and <strong>fail-soft</strong>: a server
+that won&#39;t connect logs a warning and is skipped, never crashes startup.</li>
+<li><code>/mcp</code> command: list servers, their tools, and connection status.</li>
+</ul>
+<p><strong>Defer:</strong> deferred schema loading — ✅ in 7.3 (<code>mcp_search</code> + first-call hydrate; opt out with
+<code>&quot;mcp&quot;: { &quot;deferSchemas&quot;: false }</code>).</p>
+<p><strong>Seam:</strong> <code>core/types.ts:101</code> (ToolSpec), tool-array merge at <code>cli/index.ts:148</code>.
+<strong>Effort:</strong> M. <strong>Depends on:</strong> 5.0 (pinned SDK). <strong>Verify:</strong> connect the official filesystem +
+a stdio echo server; model calls an MCP tool through a permission prompt; <code>/mcp</code> lists them.</p>
+<h2>Phase 5.2 — Context compaction ⭐⭐⭐ (correctness, not polish)</h2>
+<p><strong>Why:</strong> <code>Agent.messages</code> grows unbounded (<code>agent.ts:159,236</code>); the only mitigations are
+per-output clamps. Any real multi-hour session eventually hard-fails at the provider&#39;s context
+limit. Claude Code treats this as must-have. This is what makes polycode <em>usable</em>, not just
+<em>demoable</em>.</p>
+<p><strong>Build:</strong></p>
+<ul>
+<li>Token accounting: implement the declared-but-dead <code>Provider.countTokens?</code> (<code>types.ts:141</code>) — or
+a cheap <code>chars/4</code> estimator behind it — and a running estimate of <code>this.messages</code>.</li>
+<li>At the <strong>top of the <code>run()</code> loop</strong> (<code>agent.ts:78</code>, before each <code>provider.stream</code>): if estimated
+tokens &gt; <code>0.8 × capabilities().contextWindow</code>, compact:<ol>
+<li><strong>Tool outputs first</strong> (they dominate): replace large old <code>tool_result</code> bodies with a one-line
+synopsis + <code>[elided in compaction]</code>.</li>
+<li>If still over, summarize the oldest conversation turns via the <strong>cheap-tier provider</strong> (we
+already have one via the router) into a single synthetic summary message; always preserve the
+original task, the most recent K turns, and pinned project context.</li>
+</ol>
+</li>
+<li><code>/compact [focus]</code> for manual compaction with a focus hint; extend the existing token meter into
+a <code>/context</code> breakdown (files vs tool output vs system vs history).</li>
+</ul>
+<p><strong>Seam:</strong> <code>agent.ts:78</code> (loop top), <code>providers/src/index.ts</code> (real contextWindow + countTokens).
+<strong>Effort:</strong> M. <strong>Depends on:</strong> 5.0 (accurate context windows). <strong>Verify:</strong> drive a session past
+the window with a small-context model; confirm it compacts and keeps going coherently.</p>
+<h2>Phase 5.3 — Subagents / Task tool ⭐⭐⭐</h2>
+<p><strong>Why:</strong> the killer pattern for large codebases — fan out exploration/refactor work into a child
+with its own context window so the parent&#39;s context stays clean. The <code>Agent</code> class is already
+self-contained and reusable (<code>agent.ts:42</code>), so this is mostly wiring.</p>
+<p><strong>Build:</strong></p>
+<ul>
+<li>New <code>task</code> ToolSpec: <code>run({description, prompt, subagent_type?})</code> constructs a fresh <code>Agent</code> with
+the <strong>same permission engine</strong> (so user control of mutations is unified) and the <strong>same sandbox</strong>,
+but a curated toolset that <strong>excludes <code>task</code></strong> (recursion guard) — optionally on a cheaper model
+(cost control; trivial given our multi-provider providers/router). Run to completion; return only
+the child&#39;s final text — its intermediate steps never enter the parent&#39;s context (that isolation
+<em>is</em> the value).</li>
+<li>Subagent types from <code>.polycode/agents/*.md</code> (frontmatter: <code>model</code>, <code>tools</code>, <code>system</code>); ship a
+default <code>general</code> + a read-only <code>explore</code>.</li>
+<li>TUI: render a Task call as a collapsed nested entry (new Entry kind in <code>EntryView</code>, <code>app.tsx:404</code>).</li>
+</ul>
+<p><strong>Seam:</strong> new ToolSpec in <code>tools/src/index.ts</code>; reuses <code>Agent</code> (<code>core/agent.ts:42</code>).
+<strong>Effort:</strong> M. <strong>Depends on:</strong> 5.2 (children should compact too). <strong>Verify:</strong> a <code>task</code> that greps</p>
+<ul>
+<li>summarizes a subsystem returns a tidy result without polluting parent context; recursion guard
+holds.</li>
+</ul>
+<h2>Phase 5.4 — Custom commands + Skills ⭐⭐⭐</h2>
+<p><strong>Why:</strong> the extensibility-by-convention that makes Claude Code/opencode sticky. Today commands are
+a hardcoded if-chain (<code>app.tsx:234-285</code>) — adding one means editing the TUI.</p>
+<p><strong>Build:</strong></p>
+<ul>
+<li>A <strong>command registry</strong>. Built-ins stay as code; user commands load from <code>.polycode/commands/&lt;name&gt;.md</code>
+and <code>~/.config/polycode/commands</code>. A command file = frontmatter (<code>description</code>, <code>argument-hint</code>,
+optional <code>model</code>, <code>allowed-tools</code>) + a markdown body that becomes the turn prompt, with
+<code>$ARGUMENTS</code> / <code>$1…$N</code> substitution. <code>/name args</code> expands the body and submits it (optionally with
+a restricted toolset/model).</li>
+<li><strong>Skills</strong> = the same file format + a <code>descriptions-in-context, body-on-invoke</code> loading model
+(validated by Pi&#39;s &quot;lazy skills&quot; running on a sub-1000-token prompt). Phase-in auto-invocation
+(model matches a task to a skill description) after manual <code>/skill</code> works.</li>
+<li>Replace the if-chain with <code>registry.dispatch(input)</code>; keep built-ins registered the same way.</li>
+</ul>
+<p><strong>Seam:</strong> <code>app.tsx:234-285</code> → registry; new loader in <code>cli</code> or a <code>packages/commands</code>.
+<strong>Effort:</strong> M. <strong>Depends on:</strong> none (can parallel 5.1–5.3). <strong>Verify:</strong> a user <code>.md</code> command runs
+with arg substitution and a restricted toolset.</p>
+<h2>Phase 5.5 — Web tools + Todo (quick, high-value) ⭐⭐</h2>
+<ul>
+<li><strong><code>web_fetch</code></strong> (safe-ish, needs network): fetch URL → markdown → summarize against a prompt using
+the <strong>cheap-tier provider</strong> (we already have it). <strong><code>web_search</code></strong>: wire a search API (Brave/Tavily;
+key via the existing secrets store). Gate network behind the sandbox <code>network</code> flag.</li>
+<li><strong><code>todo_write</code></strong>: in-memory task list the model maintains across a multi-step task; render as a
+checklist Entry (<code>EntryView</code>, <code>app.tsx:404</code>). Low effort, outsized effect on keeping long tasks
+coherent and on the UX signal of &quot;what&#39;s it doing.&quot;</li>
+</ul>
+<p><strong>Effort:</strong> S each. <strong>Depends on:</strong> none. <strong>Verify:</strong> model fetches a doc page mid-task; todo list
+renders and updates.</p>
+<hr>
+<h2>Phase 6 — Safety &amp; config maturity (production-grade)</h2>
+<ul>
+<li><strong>6.1 Permission allow/deny rules + settings hierarchy.</strong> Extend <code>permissions.check</code>
+(<code>permissions.ts:47</code>): before prompting, match the call against <code>allow</code>/<code>deny</code>/<code>ask</code> patterns
+(<code>Bash(npm test:*)</code>, <code>Edit(src/**)</code>) from a layered settings set (project <code>.polycode/settings.json</code><blockquote>
+<p>user &gt; local). Biggest single reduction in prompt fatigue. Keep protected paths (<code>.git</code>, <code>.env</code>,
+<code>.polycode</code>) never-auto-approved (we already block <code>.polycode</code> in <code>resolveSafe</code>). <strong>Effort:</strong> M.</p>
+</blockquote>
+</li>
+<li><strong>6.2 Hooks.</strong> ✅ Config-driven lifecycle hooks: <code>PreToolUse</code> (block by nonzero exit → deny),
+<code>PostToolUse</code>, <code>SessionStart/End</code>, <code>UserPromptSubmit</code>, plus <code>Stop</code> / <code>SubagentStart</code> / <code>SubagentStop</code>.
+Each = a matcher + a sandbox shell command. <code>UserPromptSubmit</code> also denies on nonzero.
+<code>/hooks</code> lists them. JSON workflows (<code>.polycode/workflows/*.json</code>) and <code>/worktree apply</code> shipped
+in the same slice. <strong>Effort:</strong> M.</li>
+<li><strong>6.3 Checkpoints / rewind.</strong> Snapshot target file(s) before each mutating tool into
+<code>.polycode/checkpoints/&lt;turn&gt;/</code>; <code>Esc Esc</code> / <code>/rewind</code> restores. Pairs with the edit tools; high
+safety-per-effort. <strong>Effort:</strong> M.</li>
+<li><strong>6.4 Memory write-back + <code>/memory</code>.</strong> ✅ Curated <code>.polycode/memory.md</code> (not a transcript),
+<code>memory</code> tool, <code>/memory</code> / <code>/memory add</code> / <code>/memory clear</code>, injected by <code>gatherContext</code>.
+<strong>Effort:</strong> S–M.</li>
+</ul>
+<h2>Phase 7 — UX polish</h2>
+<ul>
+<li><strong>7.1 @-file mentions</strong> — composer pre-process (<code>app.tsx:230</code>) expands <code>@path</code> into inlined file
+content before submit. <strong>S.</strong></li>
+<li><strong>7.2 Image input</strong> — ✅ <code>ImagePart</code> on user messages, AI SDK <code>image</code> mapping, <code>/image &lt;path&gt;</code>
+and <code>@shot.png</code>. Terminal paste of binary images is not available in Ink; path/<code>@</code> is the surface.
+<strong>M.</strong></li>
+<li><strong>7.3 Observability</strong> — ✅ <code>/context</code>, <code>/cost</code>, customizable <code>$token</code> status line
+(<code>/statusline</code>, <code>statusLine.template</code> / <code>command</code>), deferred MCP schemas (<code>mcp_search</code> +
+first-call hydrate; <code>&quot;mcp&quot;: { &quot;deferSchemas&quot;: false }</code> for eager). <strong>M.</strong></li>
+</ul>
+<h2>Phase 8 — Server hardening (deployability)</h2>
+<p>✅ Bearer / <code>X-Api-Key</code> (timing-safe), hosted permission policy (<code>plan</code> / docker
+<code>acceptEdits</code>; no prompt; yolo only with <code>--insecure</code>), per-IP rate + concurrency limits,
+body/message caps, turn abort, request ids, audit JSONL, non-root Docker image on
+<code>0.0.0.0</code> with <code>/health</code> HEALTHCHECK. <code>--host</code> / <code>hosted.*</code> config. <strong>Effort:</strong> M–L.</p>
+<h2>Phase 9 — Ecosystem (later)</h2>
+<p>✅ Plugin bundles (<code>.polycode/plugins/&lt;name&gt;</code>: skills/commands/agents/hooks/MCP/LSP),
+IDE HTTP bridge (<code>/ide</code>, <code>/ide/context</code>, <code>/ide/catalog</code> + <code>&lt;ide&gt;</code> on <code>/chat</code>), optional
+<code>lsp</code> tool (JSON-RPC stdio, config-only, fail-soft). OpenTelemetry metrics still later.</p>
+<hr>
+<h2>Sequencing rationale</h2>
+<p>Order = <strong>usefulness-per-unit-effort × what compounds</strong>, with correctness gates first:</p>
+<ol>
+<li><strong>5.0 ground truth</strong> — unblocks everything; cheapest.</li>
+<li><strong>5.2 compaction before 5.3 subagents</strong> — children need to compact too; and compaction is a
+correctness fix that makes <em>all</em> sessions usable.</li>
+<li><strong>5.1 MCP early</strong> — highest absolute leverage; cheap via the AI SDK; independent of the others
+so it can run in parallel with 5.2.</li>
+<li><strong>5.3 / 5.4 / 5.5</strong> — the productivity layer users feel daily.</li>
+<li><strong>Phase 6</strong> — once it&#39;s useful, make it safe/configurable for real/team use.</li>
+<li><strong>7 → 8 → 9</strong> — polish, then deployment, then ecosystem.</li>
+</ol>
+<p><strong>Recommended this-week slice:</strong> 5.0 (ground truth) → 5.1 (MCP) in parallel with 5.2 (compaction).
+That single week converts polycode from &quot;basic parity demo&quot; to &quot;extensible + survives long sessions&quot;
+— the two things standing between it and real daily use. Each phase ships as its own cranky-gated PR
+(the established polycode merge discipline).</p>
+<h2>Cross-cutting decisions (the &quot;ultrathink&quot; calls)</h2>
+<ul>
+<li><strong>MCP execution routes through the permission engine, not around it.</strong> MCP tools are wrapped as
+ordinary <code>ToolSpec</code>s; the loop never learns they&#39;re &quot;special.&quot; This is why the clean seam was
+worth building.</li>
+<li><strong>Compaction summarizes with the cheap tier, not the active model.</strong> We already pay for a router;
+reuse it so compaction is near-free and never burns strong-model budget.</li>
+<li><strong>Subagents share the parent&#39;s permission engine and sandbox, isolate only context.</strong> Users keep
+one coherent approval surface; isolation is a context-window property, not a security boundary.</li>
+<li><strong>Commands and Skills are one mechanism</strong> (markdown + frontmatter + arg substitution), differing
+only in load timing (eager body vs description-now/body-on-invoke). Build the registry once.</li>
+<li><strong>Everything is a file convention under <code>.polycode/</code></strong> (<code>mcp.json</code>, <code>commands/</code>, <code>agents/</code>,
+<code>settings.json</code>, <code>hooks</code>, <code>checkpoints/</code>, <code>sessions/</code>) — discoverable, git-shareable, matching the
+opencode/Claude-Code mental model. <code>.polycode/</code> is already sandbox- and git-ignored.</li>
+</ul>
+<h2>Explicitly out of scope</h2>
+<p>Anthropic provider / <code>claude-*</code> models / <code>@ai-sdk/anthropic</code> (permanent). Cloud-hosted artifacts,
+managed org policy console, Bedrock/Vertex/Foundry routing, and a desktop/computer-use app — not
+aligned with a self-hostable, provider-agnostic CLI.</p>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

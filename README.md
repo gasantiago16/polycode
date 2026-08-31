@@ -1,8 +1,9 @@
 # polycode
 
 A terminal coding agent with a Claude Code–style interface, built **provider-agnostic**:
-the same agent engine drives **OpenAI**, **Google Gemini**, and **xAI (Grok)** — with
-runtime model switching, smart routing, and an optional hosted server mode.
+the same agent engine drives **OpenAI**, **Google Gemini**, **xAI (Grok)**, **Meta Muse**,
+**NVIDIA NIM**, **Qwen**, and **Anthropic** — with runtime model switching, smart routing,
+and an optional hosted server mode.
 
 > Status: **experimental local alpha (`0.1.0-alpha`)**. The local agent loop, tools,
 > permissions, TUI, routing, and session persistence work end-to-end and have an automated
@@ -106,5 +107,5 @@ See [docs/deploy.md](docs/deploy.md) for the full guide.
 
 - **Bundle**: `corepack pnpm build` → single `packages/cli/dist/index.js` (`poly` bin) via tsup.
 - **Local CLI**: run the bundle, or `pnpm -C packages/cli link --global` → `poly`.
-- **Publish** (manual): `cd packages/cli && npm publish` — internal packages are bundled, so consumers install only third-party deps.
-- **Hosted service**: `docker build -t polycode-server .` then `docker run -p 8787:8787 -e OPENAI_API_KEY=... polycode-server`.
+- **Not published to npmjs.** `@polycode/cli` is `private`. Distribute via git + Docker.
+- **Hosted service**: `docker build -t polycode-server .` then `docker run -p 8787:8787 -e POLYCODE_AUTH_TOKEN=... -e OPENAI_API_KEY=... polycode-server`.

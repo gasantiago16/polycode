@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Agent } from "./agent.js";
 import { PermissionEngine } from "./permissions.js";
-import type { CanonicalEvent, GenerateRequest, Provider, Sandbox, ToolSpec } from "./types.js";
+import type { CanonicalEvent, CanonicalMessage, GenerateRequest, Provider, Sandbox, ToolSpec } from "./types.js";
 
 const capabilities = {
   contextWindow: 10_000, maxOutput: 1_000, supportsTools: true,
@@ -125,5 +125,214 @@ describe("Agent", () => {
     const events = await collect(agent);
     expect(run).not.toHaveBeenCalled();
     expect(events.some((e) => e.type === "tool_denied")).toBe(true);
+  });
+
+  it("redacts secrets in tool output before they enter history", async () => {
+    const leak: ToolSpec = {
+      name: "read",
+      description: "",
+      parameters: {},
+      permission: "safe",
+      parallelSafe: true,
+      async run() {
+        return { output: "token sk-abcdefghijklmnopqrstuvwxyz123456" };
+      },
+    };
+    const provider = new ScriptedProvider([
+      [
+        { type: "tool_call", call: { type: "tool_call", id: "1", name: "read", input: {} } },
+        { type: "stop", reason: "tool_use" },
+      ],
+      [{ type: "text_delta", text: "ok" }, { type: "stop", reason: "end_turn" }],
+    ]);
+    const agent = new Agent(provider, [leak], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    agent.pushUser("read it");
+    await collect(agent);
+    const blob = JSON.stringify(agent.history());
+    expect(blob).not.toContain("sk-abcdefghijklmnopqrstuvwxyz123456");
+    expect(blob).toContain("[REDACTED]");
+  });
+
+  it("auto-compacts a bloated history before the next model turn", async () => {
+    const tiny = { ...capabilities, contextWindow: 80 };
+    const fat = "z".repeat(400);
+    const initialMessages: CanonicalMessage[] = [
+      { role: "user", content: [{ type: "text", text: "task" }] },
+      { role: "assistant", content: [{ type: "tool_call", id: "1", name: "read", input: {} }] },
+      { role: "tool", content: [{ type: "tool_result", id: "1", name: "read", output: fat }] },
+      { role: "assistant", content: [{ type: "tool_call", id: "2", name: "read", input: {} }] },
+      { role: "tool", content: [{ type: "tool_result", id: "2", name: "read", output: fat }] },
+      { role: "assistant", content: [{ type: "tool_call", id: "3", name: "read", input: {} }] },
+      { role: "tool", content: [{ type: "tool_result", id: "3", name: "read", output: "recent-ok" }] },
+    ];
+    const provider: Provider = {
+      id: "test",
+      model: "scripted",
+      capabilities: () => tiny,
+      async *stream() {
+        yield { type: "text_delta", text: "ok" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const agent = new Agent(provider, [], new PermissionEngine("ask", async () => "deny"), {
+      sandbox,
+      compact: { keepRecentToolResults: 1, thresholdPercent: 50 },
+      initialMessages,
+    });
+    const events = await collect(agent);
+    const compacted = events.find((e) => e.type === "compacted");
+    expect(compacted?.type).toBe("compacted");
+    if (compacted?.type === "compacted") {
+      expect(compacted.stats.after).toBeLessThan(compacted.stats.before);
+    }
+    const blob = JSON.stringify(agent.history());
+    expect(blob).toContain("recent-ok");
+    expect(blob).not.toContain(fat);
+  });
+
+  it("sticky-suppresses auto-compact after a failed shrink", async () => {
+    const tiny = { ...capabilities, contextWindow: 8 };
+    const provider = new ScriptedProvider([[{ type: "stop", reason: "end_turn" }]]);
+    provider.capabilities = () => tiny;
+    const initialMessages: CanonicalMessage[] = [{ role: "user", content: [{ type: "text", text: "task" }] }];
+    for (let i = 0; i < 8; i++) {
+      initialMessages.push(
+        { role: "user", content: [{ type: "text", text: `u${i}` }] },
+        { role: "assistant", content: [{ type: "text", text: `a${i}` }] },
+      );
+    }
+    const agent = new Agent(provider, [], new PermissionEngine("ask", async () => "deny"), {
+      sandbox,
+      compact: {
+        thresholdPercent: 1,
+        keepRecentTurns: 2,
+        summarize: async () => {
+          throw new Error("summarizer down");
+        },
+      },
+      initialMessages,
+    });
+    const first = await agent.compactNow("auto");
+    const second = await agent.compactNow("auto");
+    expect(first?.suppressed).toBe(true);
+    expect(second?.suppressed).toBe(true);
+  });
+
+  it("rewinds a mutating write back to the prior file contents", async () => {
+    const files = new Map<string, string>([["a.txt", "old"]]);
+    const sb: Sandbox = {
+      ...sandbox,
+      async readFile(p) {
+        const v = files.get(p);
+        if (v === undefined) throw new Error("missing");
+        return v;
+      },
+      async writeFile(p, c) {
+        files.set(p, c);
+      },
+    };
+    const writeTool: ToolSpec = {
+      name: "write",
+      description: "",
+      parameters: {},
+      permission: "mutating",
+      parallelSafe: false,
+      async run(input: { path: string; content: string }, ctx) {
+        await ctx.sandbox.writeFile(input.path, input.content);
+        return { output: "wrote" };
+      },
+    };
+    const provider = new ScriptedProvider([
+      [
+        {
+          type: "tool_call",
+          call: { type: "tool_call", id: "1", name: "write", input: { path: "a.txt", content: "new" } },
+        },
+        { type: "stop", reason: "tool_use" },
+      ],
+      [{ type: "text_delta", text: "done" }, { type: "stop", reason: "end_turn" }],
+    ]);
+    const agent = new Agent(provider, [writeTool], new PermissionEngine("yolo", async () => "once"), {
+      sandbox: sb,
+    });
+    agent.pushUser("edit it");
+    await collect(agent);
+    expect(files.get("a.txt")).toBe("new");
+    const r = await agent.rewind();
+    expect(r?.files).toContain("a.txt");
+    expect(files.get("a.txt")).toBe("old");
+  });
+
+  it("PreToolUse hook can deny a permitted tool", async () => {
+    const run = vi.fn(async () => ({ output: "wrote" }));
+    const writeTool: ToolSpec = {
+      name: "write",
+      description: "",
+      parameters: {},
+      permission: "mutating",
+      parallelSafe: false,
+      run,
+    };
+    const provider = new ScriptedProvider([
+      [
+        { type: "tool_call", call: { type: "tool_call", id: "1", name: "write", input: { path: "a.ts" } } },
+        { type: "stop", reason: "tool_use" },
+      ],
+      [{ type: "stop", reason: "end_turn" }],
+    ]);
+    const agent = new Agent(provider, [writeTool], new PermissionEngine("yolo", async () => "once"), {
+      sandbox: {
+        ...sandbox,
+        async exec() {
+          return { stdout: "", stderr: "hook-deny", code: 1 };
+        },
+      },
+      hooks: { PreToolUse: [{ matcher: "write", command: "deny" }] },
+    });
+    agent.pushUser("edit");
+    const events = await collect(agent);
+    expect(run).not.toHaveBeenCalled();
+    expect(events.some((e) => e.type === "tool_denied")).toBe(true);
+  });
+
+  it("submitPrompt skips pushUser when UserPromptSubmit blocks", async () => {
+    const provider = new ScriptedProvider([[{ type: "stop", reason: "end_turn" }]]);
+    const agent = new Agent(provider, [], new PermissionEngine("ask", async () => "deny"), {
+      sandbox: {
+        ...sandbox,
+        async exec() {
+          return { stdout: "", stderr: "nope", code: 1 };
+        },
+      },
+      hooks: { UserPromptSubmit: [{ command: "check" }] },
+    });
+    const r = await agent.submitPrompt("secret");
+    expect(r.blocked).toBe(true);
+    expect(agent.history()).toHaveLength(0);
+  });
+
+  it("records worktree paths from spawnChild", async () => {
+    const provider = new ScriptedProvider([
+      [{ type: "text_delta", text: "ok" }, { type: "stop", reason: "end_turn" }],
+    ]);
+    const parent = new Agent(provider, [], new PermissionEngine("ask", async () => "deny"), {
+      sandbox,
+      openWorktree: async () => ({ sandbox, path: "/tmp/wt-abc" }),
+    });
+    const r = await parent.spawnChild({
+      description: "iso",
+      prompt: "x",
+      isolation: "worktree",
+    });
+    expect(r.output).toContain("/tmp/wt-abc");
+    expect(parent.sessionWorktrees()).toEqual(["/tmp/wt-abc"]);
+  });
+
+  it("stores image parts on the user message", async () => {
+    const provider = new ScriptedProvider([[{ type: "stop", reason: "end_turn" }]]);
+    const agent = new Agent(provider, [], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    agent.pushUser("see this", [{ type: "image", mediaType: "image/png", data: "aaa", path: "shot.png" }]);
+    const user = agent.history()[0];
+    expect(user.content.some((p) => p.type === "image" && p.path === "shot.png")).toBe(true);
   });
 });

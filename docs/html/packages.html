@@ -42,16 +42,20 @@
 <a href="packages.html" class="active">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Packages</h1>
 <p>A pnpm monorepo. Packages depend inward toward <code>core</code>; nothing in <code>core</code> depends on a
 provider, transport, or UI.</p>
 <pre><code>cli ─┬─ tui ──┬─ core
-     │         └─ secrets
+     │         ├─ secrets
+     │         └─ workflows ── core
      ├─ providers ── core
      ├─ router ──── providers, core
      ├─ tools ───── core
+     ├─ plugins ─── core, skills
+     ├─ lsp ─────── core
      ├─ sandbox ─── core
      ├─ secrets
      └─ server ──── router, tools, core
@@ -63,6 +67,9 @@ provider, transport, or UI.</p>
 <code>StopReason</code>, <code>ToolSpec</code>, <code>Capabilities</code>, <code>GenerateRequest</code>, <code>Provider</code>.</li>
 <li><code>permissions.ts</code> — <code>PermissionEngine</code> + <code>PermissionMode</code> (plan/ask/acceptEdits/yolo).</li>
 <li><code>agent.ts</code> — <code>Agent</code> (the loop) emitting <code>AgentUIEvent</code>s.</li>
+<li><code>hooks.ts</code> — lifecycle hook runner (<code>PreToolUse</code> deny, <code>$TOOL_NAME</code> / <code>$FILE</code> / <code>$PROMPT</code>, …).</li>
+<li><code>memory.ts</code> — curated <code>.polycode/memory.md</code> read/append/replace.</li>
+<li><code>images.ts</code> — <code>@file.png</code> → <code>ImagePart</code> (base64).</li>
 </ul>
 <h2><code>@polycode/providers</code></h2>
 <ul>
@@ -116,12 +123,19 @@ per-provider <code>Capabilities</code>. Deps: <code>ai</code>, <code>@ai-sdk/ope
 <td>safe</td>
 <td>simple <code>*</code>/<code>**</code> file matching</td>
 </tr>
+<tr>
+<td><code>memory</code></td>
+<td>mutating</td>
+<td>curated <code>.polycode/memory.md</code> (<code>read</code>/<code>append</code>/<code>replace</code>)</td>
+</tr>
 </tbody></table>
 <h2><code>@polycode/sandbox</code></h2>
 <p>Tool-execution backends implementing core&#39;s <code>Sandbox</code>: <code>LocalSandbox</code> (host shell,
 path-jailed) and <code>DockerSandbox</code> (shell in a locked-down container, file ops on the
 bind-mount). <code>createSandbox({ kind, root, ... })</code>. See <a href="security.html">Security &amp; Keys</a>.
-<code>ToolContext</code> carries a <code>Sandbox</code>, so tools do no direct <code>fs</code>/<code>child_process</code>.</p>
+<code>ToolContext</code> carries a <code>Sandbox</code>, so tools do no direct <code>fs</code>/<code>child_process</code>.
+<code>addGitWorktree</code> / <code>applyGitWorktree</code> / <code>listGitWorktrees</code> / <code>removeGitWorktree</code>
+manage detached trees under <code>.polycode/worktrees/</code>.</p>
 <h2><code>@polycode/secrets</code></h2>
 <p>Secure key store: <code>getKey</code> / <code>setKey</code> / <code>deleteKey</code> / <code>configured</code> / <code>hydrateEnv</code> /
 <code>backendName</code> / <code>storeLocation</code>. Optional dep <code>@napi-rs/keyring</code> (keychain); <code>0600</code> file
@@ -130,12 +144,22 @@ fallback. See <a href="security.html">Security &amp; Keys</a>.</p>
 <p>Claude-Code-style Ink UI. <code>Root</code> orchestrates Settings vs. the app; <code>Settings</code> handles keys
 (masked paste · env import · open key page · validate · agentic hook); <code>App</code> is the chat loop
 (welcome <code>Banner</code>, <code>⏺</code>/<code>⎿</code> tool rendering, <code>Markdown</code> assistant output, bordered composer,
-spinner with elapsed + esc-to-interrupt, status bar, slash commands); <code>theme.ts</code> holds the
+spinner with elapsed + esc-to-interrupt, <code>$token</code> status line, slash commands); <code>theme.ts</code> holds the
 accent/glyph palette. Deps: <code>ink</code>, <code>ink-text-input</code>, <code>ink-spinner</code>, <code>react</code>,
 <code>@polycode/core</code>, <code>@polycode/secrets</code>.</p>
+<h2><code>@polycode/workflows</code></h2>
+<p>Budgeted TypeScript runner: <code>runParallel</code> / <code>runSequential</code> / <code>runWorkflowFile</code>
+plus JSON loaders (<code>loadWorkflows</code>). Host is <code>spawnChild</code>. Not Rhai.</p>
+<h2><code>@polycode/plugins</code></h2>
+<p><code>loadPlugins(cwd)</code> reads <code>.polycode/plugins/&lt;name&gt;/</code> and user plugins. A bundle can ship
+skills, slash commands, extra <code>task</code> agents, hooks, MCP servers, and LSP server configs.</p>
+<h2><code>@polycode/lsp</code></h2>
+<p>JSON-RPC stdio client + <code>createLspTool</code>. Registered only when <code>.polycode/lsp.json</code> or a
+plugin <code>lsp.json</code> lists a server. Host-side (not docker-jailed).</p>
 <h2><code>@polycode/server</code></h2>
 <p><code>startServer()</code> — Node <code>http</code> server exposing the same engine over <code>POST /chat</code> (SSE) and
-<code>GET /health</code>. Deps: <code>@polycode/{core,router,tools}</code>.</p>
+<code>GET /health</code>. Bearer / <code>X-Api-Key</code>, hosted permission policy, rate limits, body caps,
+audit JSONL, IDE bridge (<code>/ide/*</code>). Deps: <code>@polycode/{core,router,tools}</code>.</p>
 <h2><code>@polycode/cli</code></h2>
 <p>Entry point: parse flags, load config, <code>hydrateEnv()</code>, then either <code>startTui(...)</code> or
 <code>startServer(...)</code>. <code>bin: poly</code> (after <code>build</code>).</p>

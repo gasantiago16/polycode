@@ -13,7 +13,7 @@ provider-blind agent engine.
 
 - ✅ Monorepo scaffolded; **typechecks clean**.
 - ✅ Canonical core (types, permission engine, agent loop).
-- ✅ Providers via AI SDK adapter: OpenAI + Gemini + xAI.
+- ✅ Providers via AI SDK adapter: OpenAI + Gemini + xAI + Muse + NVIDIA NIM + Qwen + Anthropic (catalog, 2026-08-31).
 - ✅ Smart routing: heuristic **and** model-driven classifiers (`--routing model`),
   with heuristic fallback; per-turn auto-routing in the TUI (`/route`).
 - ✅ Tools: read/write/edit/bash/grep/glob with permission classes.
@@ -24,11 +24,11 @@ provider-blind agent engine.
 - ✅ **Secure key flow**: masked first-run setup → OS keychain (DPAPI-backed on Windows),
   `0600` file fallback. Keychain backend **verified active**.
 - ✅ Tool-execution sandbox: `local` (host) + `docker` (isolated shell) backends; tools
-  run only through the `Sandbox` contract; `--sandbox docker` with graceful fallback.
+  run only through the `Sandbox` contract; `--sandbox docker` **fails closed**.
 - ✅ Hosted server: `POST /chat` (SSE) + `/health` (takes a `Sandbox`).
 - ✅ Live smoke harness (`pnpm smoke <provider:model>`).
 - ✅ Build & distribute: `tsup` bundles the CLI to a single `poly` bin (internal packages
-  bundled, third-party external); publishable `@polycode/cli`; multi-stage server `Dockerfile`.
+  bundled, third-party external); private `@polycode/cli` (not npmjs); multi-stage server `Dockerfile`.
 - ✅ Docs in Markdown + generated HTML (`docs/`, `docs/html/`).
 - ✅ **Live end-to-end provider call verified** (2026-06-23) — `pnpm smoke xai:grok-4.3`
   round-trip green (tool call → numbered result → text).
@@ -39,11 +39,12 @@ provider-blind agent engine.
 ## Key decisions (and why)
 
 1. **TypeScript + Ink + Vercel AI SDK** — closest to the Claude Code look; best multi-model
-   SDK; npm distribution.
+   SDK; ship via git + Docker, not npmjs.
 2. **Unifying SDK behind our own `Provider` interface** — fast to build, not locked in; can
    drop a hand-rolled adapter per provider where the SDK flattens something we need.
-3. **Anthropic intentionally excluded** — providers are OpenAI / Gemini / xAI only. Do not
-   add `@ai-sdk/anthropic` or `claude-*` models.
+3. **Anthropic is first-class** (reversed 2026-08-31) — `@ai-sdk/anthropic` plus
+   OpenAI-compat rows for Muse / NVIDIA NIM / Qwen. Contributor / training-tier
+   model ids are refused unless `allowTrainingTiers: true`.
 4. **Provider-blind core** — loop/tools/permissions/UI see only canonical types; the seam
    that makes multi-model work.
 5. **Engine reused local + hosted** — `core` is transport-agnostic; TUI imports it, server
@@ -61,6 +62,10 @@ provider-blind agent engine.
 - **Capability numbers are estimates** in `packages/providers/src/index.ts`.
 - **Dev resolution.** Packages point `main`/`exports` at `src/index.ts` for `tsx`. For
   publishing, switch to `dist` and run `build`.
+- **TUI flicker.** Streaming text is paint-buffered (~10 Hz). Open markdown fences
+  render without a round border so the live region does not reflow every token.
+  Frame-count tests live in `packages/tui/src/app.ux.test.ts`. Still run the TUI once
+  in a real Windows Terminal (120×40) before merging TUI-touching PRs.
 
 ## Repo
 
@@ -73,11 +78,9 @@ provider-blind agent engine.
 > is done; Phases 2–4 (tools / TUI / persistence) are queued.
 
 1. **Run the live smoke test** — paste a key via the setup screen, then
-   `corepack pnpm smoke <provider:model>`; confirm `PASS`. Also `route-check` the classifier,
-   and try `--sandbox docker` once Docker is available.
-2. **Harden hosted mode** — per-request auth + per-session permission policy on top of the
-   docker sandbox; rate limiting + audit logging before exposing the server. Build/push the
-   Docker image (the `Dockerfile` exists but hasn't been image-built from CI yet).
+   `corepack pnpm smoke <provider:model>`; confirm `PASS`. Also `route-check` the classifier.
+   `--sandbox docker` fails closed if Docker is not running.
+2. **Build/push the Docker image** — the `Dockerfile` exists but hasn't been image-built from CI yet.
 3. **Parallel-safe tool batching** — run `parallelSafe` tools concurrently in the loop.
 4. **Tune the classifier** — few-shot examples / structured output; cache across sessions.
 5. **Wire agentic key provisioning** — the Settings `a` hook is a stub; connect a real MCP/tool flow.

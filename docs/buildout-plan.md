@@ -95,9 +95,8 @@ transport, so we lean on the SDK for the protocol work instead of hand-rolling i
   that won't connect logs a warning and is skipped, never crashes startup.
 - `/mcp` command: list servers, their tools, and connection status.
 
-**Defer:** deferred schema loading ("tool search" — only inject a tool's full schema when about to
-call it). Start eager (all MCP schemas in context); add deferral in Phase 7.3 once we have a
-`/context` breakdown to justify it. Note the trade-off so it isn't silently capped.
+**Defer:** deferred schema loading — ✅ in 7.3 (`mcp_search` + first-call hydrate; opt out with
+`"mcp": { "deferSchemas": false }`).
 
 **Seam:** `core/types.ts:101` (ToolSpec), tool-array merge at `cli/index.ts:148`.
 **Effort:** M. **Depends on:** 5.0 (pinned SDK). **Verify:** connect the official filesystem +
@@ -190,40 +189,41 @@ renders and updates.
   (`Bash(npm test:*)`, `Edit(src/**)`) from a layered settings set (project `.polycode/settings.json`
   > user > local). Biggest single reduction in prompt fatigue. Keep protected paths (`.git`, `.env`,
   `.polycode`) never-auto-approved (we already block `.polycode` in `resolveSafe`). **Effort:** M.
-- **6.2 Hooks.** Config-driven lifecycle hooks: `PreToolUse` (block by nonzero exit → deny),
-  `PostToolUse` (auto-format/lint/audit), `SessionStart/End`, `UserPromptSubmit`. Each = a matcher +
-  a shell/HTTP action run **through the sandbox**. Seams: `permissions.check` + `execOne`
-  (`agent.ts:177-208`) for Pre/Post; loop top for prompt/session. **Effort:** M.
+- **6.2 Hooks.** ✅ Config-driven lifecycle hooks: `PreToolUse` (block by nonzero exit → deny),
+  `PostToolUse`, `SessionStart/End`, `UserPromptSubmit`, plus `Stop` / `SubagentStart` / `SubagentStop`.
+  Each = a matcher + a sandbox shell command. `UserPromptSubmit` also denies on nonzero.
+  `/hooks` lists them. JSON workflows (`.polycode/workflows/*.json`) and `/worktree apply` shipped
+  in the same slice. **Effort:** M.
 - **6.3 Checkpoints / rewind.** Snapshot target file(s) before each mutating tool into
   `.polycode/checkpoints/<turn>/`; `Esc Esc` / `/rewind` restores. Pairs with the edit tools; high
   safety-per-effort. **Effort:** M.
-- **6.4 Memory write-back + `/memory`.** A persistent project memory the agent can append to
-  (curated, not raw transcript) + a `/memory` editor; loaded by `gatherContext` (`context.ts:33`).
+- **6.4 Memory write-back + `/memory`.** ✅ Curated `.polycode/memory.md` (not a transcript),
+  `memory` tool, `/memory` / `/memory add` / `/memory clear`, injected by `gatherContext`.
   **Effort:** S–M.
 
 ## Phase 7 — UX polish
 
 - **7.1 @-file mentions** — composer pre-process (`app.tsx:230`) expands `@path` into inlined file
   content before submit. **S.**
-- **7.2 Image input** — add `ImagePart` to `ContentPart` (`types.ts:31`), map it in the adapter
-  (`ai-sdk-provider.ts:105-144`), accept paste/path in the composer; capabilities already claim
-  `supportsVision`. **M.**
-- **7.3 Observability** — `/context` breakdown, `/cost` (we already accumulate usage), customizable
-  status line, deferred MCP schema loading (the optimization deferred from 5.1). **M.**
+- **7.2 Image input** — ✅ `ImagePart` on user messages, AI SDK `image` mapping, `/image <path>`
+  and `@shot.png`. Terminal paste of binary images is not available in Ink; path/`@` is the surface.
+  **M.**
+- **7.3 Observability** — ✅ `/context`, `/cost`, customizable `$token` status line
+  (`/statusline`, `statusLine.template` / `command`), deferred MCP schemas (`mcp_search` +
+  first-call hydrate; `"mcp": { "deferSchemas": false }` for eager). **M.**
 
 ## Phase 8 — Server hardening (deployability)
 
-Per-request auth (bearer/API key), per-session permission policy on top of the docker sandbox, rate
-limiting + audit logging, and an actual image build from the existing `Dockerfile`. The server today
-is an explicit yolo scaffold (`server/src/index.ts:14-20`) — this is the gate before exposing it.
-**Effort:** M–L.
+✅ Bearer / `X-Api-Key` (timing-safe), hosted permission policy (`plan` / docker
+`acceptEdits`; no prompt; yolo only with `--insecure`), per-IP rate + concurrency limits,
+body/message caps, turn abort, request ids, audit JSONL, non-root Docker image on
+`0.0.0.0` with `/health` HEALTHCHECK. `--host` / `hosted.*` config. **Effort:** M–L.
 
 ## Phase 9 — Ecosystem (later)
 
-IDE bridge (the server already makes this feasible), a plugin bundle format (commands + hooks +
-agents + MCP servers in one installable, opencode/Claude-Code style), optional LSP integration for
-type-aware navigation, OpenTelemetry metrics. Deliberately last — these compound only after the
-core is genuinely useful.
+✅ Plugin bundles (`.polycode/plugins/<name>`: skills/commands/agents/hooks/MCP/LSP),
+IDE HTTP bridge (`/ide`, `/ide/context`, `/ide/catalog` + `<ide>` on `/chat`), optional
+`lsp` tool (JSON-RPC stdio, config-only, fail-soft). OpenTelemetry metrics still later.
 
 ---
 

@@ -1,5 +1,5 @@
 {
-  "$comment": "Copy to polycode.config.json (cwd) or ~/.config/polycode/config.json. Providers: openai | google | xai. Confirmed IDs (Jun 2026): openai gpt-5.5 / gpt-5.4-mini, google gemini-2.5-flash / gemini-2.5-pro (newer: gemini-3.5-flash, gemini-3.1-pro), xai grok-4.3 / grok-code-fast-1. Example xai tier: { \"provider\": \"xai\", \"model\": \"grok-4.3\" }.",
+  "$comment": "Copy to polycode.config.json (cwd) or ~/.config/polycode/config.json. Providers: openai | google | xai | muse | nvidia | qwen | anthropic. Run: poly --models. Contributor/training-tier ids require allowTrainingTiers: true.",
   "system": "You are polycode, a terminal coding agent. Be concise. Use tools to inspect and edit the project. Prefer the smallest change that solves the task.",
   "tiers": {
     "cheap":  { "provider": "google", "model": "gemini-2.5-flash" },
@@ -17,5 +17,50 @@
     "image": "node:22-alpine",
     "network": false,
     "memory": "1g"
+  },
+  "session": {
+    "$comment": "Grok-shaped two-pass compaction. Auto-runs at this % of the model context window. /compact [focus] always runs. Cheap-tier provider writes the prefix summary.",
+    "autoCompactThresholdPercent": 85,
+    "keepRecentTurns": 8,
+    "keepRecentToolResults": 6
+  },
+  "profile": "local",
+  "web": true,
+  "compat": { "grokSkills": false },
+  "allowTrainingTiers": false,
+  "permissions": {
+    "$comment": "Claude-style patterns. Deny wins. .env / .git / .polycode are always protected outside yolo.",
+    "allow": ["Bash(npm test*)", "Bash(pnpm test*)"],
+    "deny": ["Edit(.env)", "Write(.env)"]
+  },
+  "hooks": {
+    "$comment": "Commands run through the sandbox. Nonzero PreToolUse / UserPromptSubmit exit denies. Vars: $TOOL_NAME $FILE $TOOL_INPUT $PROMPT $OUTPUT $SUBAGENT_TYPE. Events: SessionStart UserPromptSubmit PreToolUse PostToolUse SubagentStart SubagentStop Stop SessionEnd.",
+    "PreToolUse": [],
+    "UserPromptSubmit": []
+  },
+  "hosted": {
+    "$comment": "poly --serve. mode: plan (local) or acceptEdits (docker). yolo requires --insecure. Rate limit is per client IP.",
+    "mode": "plan",
+    "rateLimit": { "windowMs": 60000, "max": 30, "concurrent": 2 },
+    "maxBodyBytes": 1000000,
+    "maxMessageChars": 32000,
+    "trustProxy": false
+  },
+  "plugins": {
+    "$comment": "Discovered from .polycode/plugins/<name>/ and ~/.config/polycode/plugins/. disable skips names.",
+    "disable": []
+  },
+  "mcp": {
+    "$comment": "deferSchemas (default true): stub MCP JSON schemas until mcp_search or first call. allowRegistrySpawns: never let mcp.json run npx/npm (public registry execute).",
+    "deferSchemas": true,
+    "allowRegistrySpawns": false
+  },
+  "statusLine": {
+    "$comment": "Idle TUI status. Tokens: $model $mode $route $sandbox $ctx $ctx_seg $sum $sum_seg $mcp $mcp_seg $cost $cost_seg $cwd. Optional command runs through the sandbox.",
+    "template": "$model · $mode · route:$route · sandbox:$sandbox$ctx_seg$sum_seg$mcp_seg"
+  },
+  "providers": {
+    "$comment": "allow: omit to permit every catalog id. custom: extra OpenAI-compat endpoints (on-prem NIM, vLLM) with no code change. NVIDIA_BASE_URL / MUSE_BASE_URL / QWEN_BASE_URL override hosted URLs.",
+    "custom": []
   }
 }

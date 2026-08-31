@@ -28,7 +28,15 @@ export interface ToolResultPart {
   output: string;
   isError?: boolean;
 }
-export type ContentPart = TextPart | ReasoningPart | ToolCallPart | ToolResultPart;
+export interface ImagePart {
+  type: "image";
+  mediaType: string;
+  /** Raw base64 (no data: prefix). */
+  data: string;
+  /** Original project-relative path, when loaded from disk. */
+  path?: string;
+}
+export type ContentPart = TextPart | ReasoningPart | ToolCallPart | ToolResultPart | ImagePart;
 
 export interface CanonicalMessage {
   role: Role;
@@ -79,7 +87,11 @@ export interface ExecOptions {
 export interface Sandbox {
   /** Human-readable label (project path, or "docker:<id> (path)"). */
   readonly root: string;
+  /** Host filesystem project root, when the backend can create git worktrees. */
+  readonly projectPath?: string;
   readFile(relPath: string): Promise<string>;
+  /** Optional binary read (images). Local/docker backends implement this. */
+  readFileBytes?(relPath: string): Promise<Uint8Array>;
   writeFile(relPath: string, content: string): Promise<void>;
   exec(command: string, opts?: ExecOptions): Promise<ExecResult>;
   /**
@@ -93,9 +105,36 @@ export interface Sandbox {
   dispose(): Promise<void>;
 }
 
+export interface SpawnChildInput {
+  description: string;
+  prompt: string;
+  subagent_type?: string;
+  /** Isolated git worktree for this child (writes do not hit the parent tree). */
+  isolation?: "none" | "worktree";
+}
+
+export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
+
+export interface TodoItem {
+  id: string;
+  content: string;
+  status: TodoStatus;
+}
+
+export interface TodoStore {
+  list(): TodoItem[];
+  replace(items: TodoItem[]): void;
+}
+
 export interface ToolContext {
   sandbox: Sandbox;
   signal?: AbortSignal;
+  todos?: TodoStore;
+  /**
+   * Parent-only: run a child Agent loop (no nested task). Used by the `task`
+   * tool. Children must not receive this.
+   */
+  spawnChild?: (input: SpawnChildInput) => Promise<ToolRunResult>;
 }
 
 export interface ToolSpec {
@@ -107,6 +146,11 @@ export interface ToolSpec {
   permission: PermissionClass;
   /** Read-only tools may be executed concurrently. */
   parallelSafe: boolean;
+  /**
+   * When true, `parameters` is a stub and the full JSON schema is not yet in
+   * the model context (MCP deferred schemas). Cleared by mcp_search / first use.
+   */
+  schemaDeferred?: boolean;
   run(input: any, ctx: ToolContext): Promise<ToolRunResult>;
 }
 
