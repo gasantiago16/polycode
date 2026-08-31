@@ -64,6 +64,16 @@ describe("PermissionEngine", () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 
+  it("treats explore/researcher task children as safe so plan can fan them out", async () => {
+    const prompt = vi.fn(async () => "deny" as const);
+    const engine = new PermissionEngine("plan", prompt);
+    const task = tool("task", "mutating");
+    expect((await engine.check(task, { subagent_type: "explore", prompt: "look" })).allow).toBe(true);
+    expect((await engine.check(task, { subagent_type: "researcher", prompt: "cite" })).allow).toBe(true);
+    expect((await engine.check(task, { subagent_type: "general", prompt: "edit" })).allow).toBe(false);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
   it("deny rules beat the safe-class short-circuit", async () => {
     const prompt = vi.fn(async () => "once" as const);
     const engine = new PermissionEngine("plan", prompt, compileRules({ deny: ["Read"] }));

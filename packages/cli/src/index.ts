@@ -10,6 +10,7 @@ import {
   mergeHookSets,
   registerExtraChildren,
   listExtraChildren,
+  loadPersonas,
   CHILD_TYPES,
   type CompactConfig,
   type GenerateRequest,
@@ -40,7 +41,7 @@ import {
 import { loadWorkflows } from "@polycode/workflows";
 import { loadPlugins } from "@polycode/plugins";
 import { createLspTool } from "@polycode/lsp";
-import { hydrateEnv, getKey, ENV_VAR, type ProviderId } from "@polycode/secrets";
+import { hydrateEnv, loadDotEnvFiles, envFileCandidates, getKey, ENV_VAR, type ProviderId } from "@polycode/secrets";
 import { tools as allTools } from "@polycode/tools";
 import { connectMcpServers, createMcpSearchTool, loadMcpConfig, type McpServerStatus } from "@polycode/mcp";
 import { expandSkill, loadSkills, skillPromptBlock } from "@polycode/skills";
@@ -85,7 +86,7 @@ const DEFAULT_CONFIG: AppConfig = {
     long: { provider: "google", model: "gemini-2.5-pro" },
   },
   system:
-    "You are polycode, a terminal coding agent. Be concise. Use tools to inspect and edit the project.",
+    "You are polycode, a terminal coding agent. Be concise. Use tools to inspect and edit the project. When work splits, call several task tools in one turn so they run in parallel: explore/researcher for read-only surveys, isolation=worktree for implementers. background=true returns an id (task_wait collects). resume_from continues a finished child. persona= applies .polycode/personas. Depth 1. Summarize child returns; do not paste raw dumps.",
 };
 
 function loadConfig(): AppConfig {
@@ -124,7 +125,7 @@ async function main(): Promise<void> {
     allowPositionals: true,
   });
 
-  // Pull keys from the OS keychain / file store into the env the SDK reads.
+  loadDotEnvFiles(envFileCandidates(process.cwd()));
   hydrateEnv();
 
   const cfg = loadConfig();
@@ -363,6 +364,8 @@ async function main(): Promise<void> {
     route,
     autoRoute: router.strategy === "model",
     validate: (p) => validateKey(cfg, p),
+    specForProvider: (p) => ({ provider: p, model: modelFor(cfg, p as ProviderId) }),
+    personas: loadPersonas(cwd),
     onAgentic: (p) =>
       `agentic provisioning for ${p} is not wired yet — coming soon (MCP/tool flow). Use paste / import-env / open-page for now.`,
     initialMessages,

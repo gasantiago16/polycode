@@ -102,6 +102,80 @@ describe("Agent", () => {
     expect(toolMessage?.content.map((p) => "name" in p ? p.name : "")).toEqual(["slow", "fast"]);
   });
 
+  it("runs consecutive explore task children concurrently", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const task: ToolSpec = {
+      name: "task",
+      description: "task",
+      parameters: {},
+      permission: "mutating",
+      parallelSafe: true,
+      async run() {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((r) => setTimeout(r, 25));
+        active--;
+        return { output: "ok" };
+      },
+    };
+    const call = (id: string, type: string) =>
+      ({
+        type: "tool_call" as const,
+        call: {
+          type: "tool_call" as const,
+          id,
+          name: "task",
+          input: { description: id, prompt: "p", subagent_type: type },
+        },
+      });
+    const provider = new ScriptedProvider([
+      [call("1", "explore"), call("2", "explore"), { type: "stop", reason: "tool_use" }],
+      [{ type: "stop", reason: "end_turn" }],
+    ]);
+    const agent = new Agent(provider, [task], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    agent.pushUser("fan out");
+    await collect(agent);
+    expect(maxActive).toBe(2);
+  });
+
+  it("auto-isolates two writable task children onto worktrees", async () => {
+    const seen: unknown[] = [];
+    const task: ToolSpec = {
+      name: "task",
+      description: "task",
+      parameters: {},
+      permission: "mutating",
+      parallelSafe: true,
+      async run(input) {
+        seen.push(input);
+        return { output: "ok" };
+      },
+    };
+    const call = (id: string) =>
+      ({
+        type: "tool_call" as const,
+        call: {
+          type: "tool_call" as const,
+          id,
+          name: "task",
+          input: { description: id, prompt: "edit", subagent_type: "general" },
+        },
+      });
+    const provider = new ScriptedProvider([
+      [call("1"), call("2"), { type: "stop", reason: "tool_use" }],
+      [{ type: "stop", reason: "end_turn" }],
+    ]);
+    const agent = new Agent(provider, [task], new PermissionEngine("yolo", async () => "once"), {
+      sandbox,
+      openWorktree: async () => ({ sandbox, path: "/tmp/wt" }),
+    });
+    agent.pushUser("two writers");
+    await collect(agent);
+    expect(seen).toHaveLength(2);
+    expect(seen.every((s) => (s as { isolation?: string }).isolation === "worktree")).toBe(true);
+  });
+
   it("stops a runaway tool loop at maxSteps", async () => {
     const call = { type: "tool_call", call: { type: "tool_call", id: "1", name: "read", input: {} } } as const;
     const provider = new ScriptedProvider([[call, { type: "stop", reason: "tool_use" }]]);

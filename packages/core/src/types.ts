@@ -111,6 +111,28 @@ export interface SpawnChildInput {
   subagent_type?: string;
   /** Isolated git worktree for this child (writes do not hit the parent tree). */
   isolation?: "none" | "worktree";
+  /** Return immediately with a child id; collect later via waitChild / task_wait. */
+  background?: boolean;
+  /** Continue a completed child's transcript. Same type; source must not be running. */
+  resume_from?: string;
+  /** Named persona overlay (instructions injected into the child system prompt). */
+  persona?: string;
+}
+
+export type ChildRunStatus = "running" | "completed" | "failed" | "killed";
+
+export interface ChildRun {
+  id: string;
+  description: string;
+  subagentType: string;
+  isolation: "none" | "worktree";
+  persona?: string;
+  worktreePath?: string;
+  status: ChildRunStatus;
+  output: string;
+  startedAt: number;
+  endedAt?: number;
+  error?: boolean;
 }
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
@@ -135,6 +157,9 @@ export interface ToolContext {
    * tool. Children must not receive this.
    */
   spawnChild?: (input: SpawnChildInput) => Promise<ToolRunResult>;
+  waitChild?: (id?: string, timeoutMs?: number) => Promise<ToolRunResult>;
+  killChild?: (id: string) => ToolRunResult;
+  listChildren?: () => ChildRun[];
 }
 
 export interface ToolSpec {

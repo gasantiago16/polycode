@@ -189,6 +189,22 @@
 <td>Spawn a read-only explore child.</td>
 </tr>
 <tr>
+<td><code>/team &lt;task&gt;</code></td>
+<td>Parallel explore (code + verify), then implement in a git worktree, then review. <code>/worktree apply</code> to copy back.</td>
+</tr>
+<tr>
+<td><code>/dashboard</code> (<code>/agents</code>, <code>Ctrl+\</code>)</td>
+<td>Child agents. Enter/<code>p</code> peek live output · <code>a</code> attach into the transcript · <code>x</code> kill.</td>
+</tr>
+<tr>
+<td><code>/loop [5m] &lt;prompt&gt;</code></td>
+<td>Recurring prompt (min 15s). <code>/loop</code> lists, <code>/loop stop [id]</code> cancels. Skips a tick if a turn is already running.</td>
+</tr>
+<tr>
+<td><code>/personas</code></td>
+<td>Persona overlays from <code>.polycode/personas/*.md</code>. Pass <code>persona</code> on <code>task</code>.</td>
+</tr>
+<tr>
 <td><code>/skills</code></td>
 <td>List loaded skills (bundled forme, matsumura-style, deep-research).</td>
 </tr>
@@ -282,11 +298,11 @@
 </tr>
 <tr>
 <td><code>/help</code></td>
-<td>List commands.</td>
+<td>Command overlay (also <code>/</code>). Tab completes; ↑↓ history.</td>
 </tr>
 <tr>
 <td><code>/exit</code> (or <code>/quit</code>)</td>
-<td>Quit.</td>
+<td>Quit. Ctrl+C interrupts a turn; twice quits.</td>
 </tr>
 </tbody></table>
 <h2>Permission prompt</h2>
@@ -297,6 +313,7 @@ class, and the call. Answer with:</p>
 <li><code>a</code> — allow this tool for the rest of the session (sticky; <code>plan</code> mode still overrides)</li>
 <li><code>n</code> / <code>Esc</code> — deny</li>
 </ul>
+<p>While a turn is running: <strong>Esc</strong> interrupts (kills foreground children). <strong>Ctrl+B</strong> detaches running children and frees the composer (<code>/dashboard</code> to peek/attach).</p>
 <p>A denied call is reported back to the model so it can adapt.</p>
 <h2>Server endpoints (hosted mode)</h2>
 <table>

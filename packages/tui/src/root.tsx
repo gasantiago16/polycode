@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Text } from "ink";
 import { App } from "./app.js";
 import { Settings } from "./settings.js";
+import { pickStartingSpec, type Spec } from "./start.js";
 import { configured, hydrateEnv, type ProviderId } from "@polycode/secrets";
 import type {
   CanonicalMessage,
@@ -9,6 +10,7 @@ import type {
   HookSet,
   ModelUsage,
   PermissionRule,
+  Persona,
   Provider,
   Sandbox,
   TodoItem,
@@ -16,10 +18,7 @@ import type {
 } from "@polycode/core";
 import type { LoadedWorkflow } from "@polycode/workflows";
 
-export interface Spec {
-  provider: string;
-  model: string;
-}
+export type { Spec } from "./start.js";
 
 export interface RootProps {
   tiers: { cheap: Spec; strong: Spec; long: Spec };
@@ -61,6 +60,9 @@ export interface RootProps {
     remove: (idOrPath: string) => Promise<string>;
   };
   statusLine?: { template?: string; command?: string };
+  /** Model id to use when the only configured provider is not in a tier (e.g. Grok-only). */
+  specForProvider?: (provider: string) => Spec;
+  personas?: Persona[];
 }
 
 /** Orchestrates first-run / on-demand settings vs. the main app. */
@@ -70,6 +72,7 @@ export function Root(props: RootProps) {
   if (mode === "settings") {
     return (
       <Settings
+        firstRun
         validate={props.validate}
         onAgentic={props.onAgentic}
         onDone={() => {
@@ -80,10 +83,16 @@ export function Root(props: RootProps) {
     );
   }
 
-  const spec = pickSpec(props);
+  const spec = pickStartingSpec(
+    configured() as string[],
+    props.tiers,
+    props.forced,
+    props.specForProvider,
+  );
   if (!spec) {
     return (
       <Settings
+        firstRun
         validate={props.validate}
         onAgentic={props.onAgentic}
         onDone={() => {
@@ -129,16 +138,9 @@ export function Root(props: RootProps) {
       workflows={props.workflows}
       worktreeOps={props.worktreeOps}
       statusLine={props.statusLine}
+      personas={props.personas}
     />
   );
 }
 
-/** Prefer --model, else the first tier whose provider has a configured key. */
-function pickSpec(props: RootProps): Spec | null {
-  const have = new Set(configured() as string[]);
-  if (props.forced && have.has(props.forced.provider)) return props.forced;
-  for (const t of [props.tiers.strong, props.tiers.cheap, props.tiers.long]) {
-    if (have.has(t.provider)) return t;
-  }
-  return null;
-}
+

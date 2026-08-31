@@ -4,9 +4,9 @@ import type { SpawnChildInput, ToolSpec } from "@polycode/core";
 export const task: ToolSpec = {
   name: "task",
   description:
-    "Delegate work to a child agent with its own context window. Types: general (default), explore (read-only), review (cranky reviewer), researcher (web), or a plugin agent name. isolation=worktree gives the child a detached git worktree (writes stay off the parent tree). Depth 1. Returns only the child's final text.",
+    "Delegate work to a child agent with its own context window. Call SEVERAL task tools in ONE turn to run them in parallel. Types: general (default), explore (read-only), review (cranky reviewer), researcher (web), or a plugin agent name. isolation=worktree: detached git copy. background=true: return an id immediately (task_wait to collect). resume_from: continue a completed child. persona: overlay from .polycode/personas/. Depth 1.",
   permission: "mutating",
-  parallelSafe: false,
+  parallelSafe: true,
   parameters: {
     type: "object",
     properties: {
@@ -21,6 +21,15 @@ export const task: ToolSpec = {
         enum: ["none", "worktree"],
         description: "none (default) shares the parent tree; worktree is an isolated git copy",
       },
+      background: {
+        type: "boolean",
+        description: "Return immediately with a child id (use task_wait to collect)",
+      },
+      resume_from: {
+        type: "string",
+        description: "Completed child id to continue (same type, full prior transcript)",
+      },
+      persona: { type: "string", description: "Persona name from .polycode/personas/" },
     },
     required: ["description", "prompt"],
     additionalProperties: false,

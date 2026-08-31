@@ -6,6 +6,7 @@ import {
   type Sandbox,
 } from "@polycode/core";
 import { task } from "./task.js";
+import { taskKill, taskWait } from "./task-ctl.js";
 import { webFetch } from "./web.js";
 import { webSearch } from "./search.js";
 import { todoWrite } from "./todo.js";
@@ -564,9 +565,27 @@ export const tools: ToolSpec[] = [
   ls,
   glob,
   task,
+  taskWait,
+  taskKill,
   webFetch,
   webSearch,
   todoWrite,
   memory,
 ];
-export { read, write, edit, multiEdit, bash, grep, ls, glob, task, webFetch, webSearch, todoWrite, memory };
+export {
+  read,
+  write,
+  edit,
+  multiEdit,
+  bash,
+  grep,
+  ls,
+  glob,
+  task,
+  taskWait,
+  taskKill,
+  webFetch,
+  webSearch,
+  todoWrite,
+  memory,
+};

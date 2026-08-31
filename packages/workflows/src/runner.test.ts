@@ -13,6 +13,7 @@ import {
   type WorkflowHost,
 } from "./index.js";
 import { deepResearchWorkflow } from "./deep-research.js";
+import { teamWorkflow } from "./team.js";
 import { loadWorkflows } from "./load.js";
 
 describe("expandVars", () => {
@@ -124,6 +125,28 @@ describe("deepResearchWorkflow", () => {
     expect(r.parts).toHaveLength(3);
     expect(r.synthesis?.output).toContain("ok:synthesize");
     expect(seen.filter((s) => s.startsWith("researcher:")).length).toBe(3);
+  });
+});
+
+describe("teamWorkflow", () => {
+  it("runs two explorers then a worktree implementer and a review", async () => {
+    const seen: string[] = [];
+    const host: WorkflowHost = {
+      agent: async (j) => {
+        seen.push(`${j.subagent_type}:${j.isolation ?? "none"}:${j.description}`);
+        return { output: `ok:${j.description}` };
+      },
+    };
+    const r = await runWorkflowFile(host, teamWorkflow(), { query: "add /health", slug: "health" });
+    expect(r.parts.map((p) => p.output)).toEqual([
+      "ok:explore-code",
+      "ok:explore-verify",
+      "ok:implement",
+      "ok:review",
+    ]);
+    expect(seen[0]).toMatch(/^explore:none:explore-code$/);
+    expect(seen[2]).toBe("general:worktree:implement");
+    expect(seen[3]).toBe("review:none:review");
   });
 });
 

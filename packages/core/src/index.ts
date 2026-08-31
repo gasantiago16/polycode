@@ -13,3 +13,5 @@ export * from "./memory.js";
 export * from "./images.js";
 export * from "./ssrf.js";
 export * from "./env.js";
+export * from "./personas.js";
+export * from "./loop.js";

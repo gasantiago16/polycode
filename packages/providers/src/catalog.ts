@@ -67,7 +67,7 @@ export const CATALOG: CatalogEntry[] = [
     id: "xai",
     kind: "xai",
     label: "xAI (Grok)",
-    envKeys: ["XAI_API_KEY"],
+    envKeys: ["XAI_API_KEY", "GROK_API_KEY"],
     keyUrl: "https://console.x.ai/",
     defaultModels: { cheap: "grok-4.3", strong: "grok-4.3", long: "grok-4.3" },
     capabilities: { ...TOOLS, contextWindow: 256_000, maxOutput: 64_000 },

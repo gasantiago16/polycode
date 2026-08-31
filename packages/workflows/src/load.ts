@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { deepResearchWorkflow } from "./deep-research.js";
+import { teamWorkflow } from "./team.js";
 import type { WorkflowFile, WorkflowJobSpec } from "./runner.js";
 
 export type WorkflowSource = "bundled" | "user" | "project";
@@ -66,7 +67,10 @@ function readDir(dir: string): Array<{ file: WorkflowFile; path: string }> {
 }
 
 export function bundledWorkflows(): LoadedWorkflow[] {
-  return [{ ...deepResearchWorkflow(), source: "bundled" }];
+  return [
+    { ...deepResearchWorkflow(), source: "bundled" },
+    { ...teamWorkflow(), source: "bundled" },
+  ];
 }
 
 /** Bundled, then user (`~/.config/polycode/workflows`), then project (last wins). */

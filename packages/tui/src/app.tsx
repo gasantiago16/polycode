@@ -13,6 +13,8 @@ import {
   replaceMemory,
   MEMORY_PATH,
   compactCostUsd,
+  parseLoopCommand,
+  formatLoopInterval,
   type CanonicalMessage,
   collectGitDiff,
   parseReviewVerdict,
@@ -26,9 +28,12 @@ import {
   type Provider,
   type Sandbox,
   type ToolSpec,
+  type ChildRun,
+  type Persona,
 } from "@polycode/core";
 import {
   deepResearchWorkflow,
+  teamWorkflow,
   hostFromSpawn,
   parseWorkflowArgs,
   runWorkflowFile,
@@ -38,9 +43,20 @@ import { relative } from "node:path";
 import { hydrateEnv, type ProviderId } from "@polycode/secrets";
 import { Banner } from "./banner.js";
 import { Settings } from "./settings.js";
+import { Help } from "./help.js";
+import { Dashboard } from "./dashboard.js";
 import { Markdown } from "./markdown.js";
 import { theme, sym, WORK_VERBS } from "./theme.js";
 import { createPaintBuffer } from "./paint.js";
+import {
+  completeSlash,
+  composerBorder,
+  composerPlaceholder,
+  didYouMean,
+  isKnownSlash,
+  matchSlash,
+  slashName,
+} from "./commands.js";
 import {
   DEFAULT_STATUS_TEMPLATE,
   expandStatusCommand,
@@ -110,6 +126,7 @@ export interface AppProps {
     remove: (idOrPath: string) => Promise<string>;
   };
   statusLine?: { template?: string; command?: string };
+  personas?: Persona[];
 }
 
 interface PendingPerm {
@@ -144,6 +161,7 @@ export function App({
   permissionRules = [],
   initialTodos,
   initialUsage,
+  personas = [],
 }: AppProps) {
   const { exit } = useApp();
   // Reconstruct any resumed conversation as already-finalized history.
@@ -158,10 +176,17 @@ export function App({
 
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  busyRef.current = busy;
+  const demoteRef = useRef(false);
   const [elapsed, setElapsed] = useState(0);
   const [verb, setVerb] = useState<string>(WORK_VERBS[0]);
   const [perm, setPerm] = useState<PendingPerm | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [dashTick, setDashTick] = useState(0);
+  const [exitHint, setExitHint] = useState(false);
   const [modelLabel, setModelLabel] = useState(`${provider.id}:${provider.model}`);
   const [mode, setMode] = useState<PermissionMode>("ask");
   const [autoRoute, setAutoRoute] = useState(!!autoRouteDefault && !!route);
@@ -205,6 +230,7 @@ export function App({
   );
 
   const engineRef = useRef(new PermissionEngine("ask", promptPermission, permissionRules));
+  const childSink = useRef<(run: ChildRun) => void>(() => {});
   const agentRef = useRef(
     new Agent(provider, tools, engineRef.current, {
       system,
@@ -215,15 +241,37 @@ export function App({
       initialUsage,
       openWorktree,
       hooks,
+      personas,
+      onChildSettled: (run) => childSink.current(run),
     }),
   );
+  childSink.current = (run) => {
+    add({
+      kind: "system",
+      text: `child ${run.id} ${run.status} · ${run.description}`,
+    });
+  };
 
   useEffect(() => {
     void agentRef.current.startSession();
     return () => {
+      for (const j of loopsRef.current) clearInterval(j.timer);
+      loopsRef.current = [];
       void agentRef.current.endSession();
     };
   }, []);
+
+  useEffect(() => {
+    if (booted.current) return;
+    booted.current = true;
+    const fails = mcpStatus.filter((s) => !s.ok);
+    if (fails.length) {
+      add({
+        kind: "system",
+        text: `mcp skipped: ${fails.map((s) => s.name).join(", ")} · /mcp for details`,
+      });
+    }
+  }, [mcpStatus]);
 
   useEffect(() => {
     const cmd = statusLine?.command?.trim();
@@ -277,6 +325,14 @@ export function App({
     });
   };
   const abortRef = useRef<AbortController | null>(null);
+  const inputRef = useRef(input);
+  inputRef.current = input;
+  const historyRef = useRef<string[]>([]);
+  const histIdx = useRef(-1);
+  const draftRef = useRef("");
+  const lastCtrlC = useRef(0);
+  const booted = useRef(false);
+  const loopsRef = useRef<Array<{ id: string; intervalMs: number; prompt: string; timer: ReturnType<typeof setInterval>; fires: number }>>([]);
 
   // elapsed-time ticker while busy
   useEffect(() => {
@@ -300,12 +356,87 @@ export function App({
     { isActive: !!perm },
   );
 
-  // esc to interrupt a running turn
+  // esc to interrupt a running turn · Ctrl+B demotes children to background
   useInput(
-    (_ch, key) => {
+    (ch, key) => {
       if (key.escape) abortRef.current?.abort();
+      if (key.ctrl && (ch === "b" || ch === "B")) {
+        const ids = agentRef.current.detachRunningChildren();
+        demoteRef.current = true;
+        abortRef.current?.abort();
+        add({
+          kind: "system",
+          text: ids.length
+            ? `Ctrl+B · ${ids.join(", ")} still running · /dashboard`
+            : "Ctrl+B · turn backgrounded",
+        });
+      }
     },
     { isActive: busy && !perm },
+  );
+
+  useInput((ch, key) => {
+    if (key.ctrl && ch === "c") {
+      if (perm) {
+        perm.resolve("deny");
+        setPerm(null);
+        return;
+      }
+      if (showHelp) {
+        setShowHelp(false);
+        return;
+      }
+      if (showDashboard) {
+        setShowDashboard(false);
+        return;
+      }
+      if (busy) {
+        abortRef.current?.abort();
+        return;
+      }
+      const now = Date.now();
+      if (now - lastCtrlC.current < 1600) {
+        void agentRef.current.endSession();
+        exit();
+        return;
+      }
+      lastCtrlC.current = now;
+      setExitHint(true);
+      setTimeout(() => setExitHint(false), 1600);
+    }
+  });
+
+  useInput(
+    (_ch, key) => {
+      if (key.tab) {
+        const next = completeSlash(inputRef.current);
+        if (next) setInput(next);
+        return;
+      }
+      const hist = historyRef.current;
+      if (key.upArrow) {
+        if (!hist.length) return;
+        if (histIdx.current === -1) draftRef.current = inputRef.current;
+        const next = Math.min(hist.length - 1, histIdx.current + 1);
+        histIdx.current = next;
+        setInput(hist[hist.length - 1 - next]);
+        return;
+      }
+      if (key.downArrow) {
+        if (histIdx.current < 0) return;
+        const next = histIdx.current - 1;
+        histIdx.current = next;
+        setInput(next < 0 ? draftRef.current : hist[hist.length - 1 - next]);
+      }
+    },
+    { isActive: !perm && !showSettings && !showHelp && !showDashboard && !busy },
+  );
+
+  useInput(
+    (ch, key) => {
+      if (key.ctrl && (ch === "\\" || ch === "|")) setShowDashboard((v) => !v);
+    },
+    { isActive: !perm && !showSettings },
   );
 
   const drive = async (signal: AbortSignal) => {
@@ -351,16 +482,20 @@ export function App({
         }
       }
     } catch (e) {
-      if (signal.aborted) add({ kind: "system", text: "interrupted" });
-      else add({ kind: "error", text: String(e) });
+      if (signal.aborted) {
+        add({
+          kind: "system",
+          text: demoteRef.current ? "turn backgrounded · /dashboard" : "interrupted",
+        });
+      } else add({ kind: "error", text: String(e) });
     } finally {
       paint.flush();
+      const demoted = demoteRef.current;
+      demoteRef.current = false;
       setBusy(false);
-      commit(); // finished turn → move it into <Static> so it stops repainting
-      // Only persist a resumable state: skip on interrupt or a dangling
-      // assistant tool_use with no results (providers reject that on replay).
+      commit();
       const history = agentRef.current.history() as CanonicalMessage[];
-      if (!signal.aborted && isResumable(history)) persist();
+      if ((!signal.aborted || demoted) && isResumable(history)) persist();
     }
   };
 
@@ -370,19 +505,120 @@ export function App({
     setCtxWindow(next.capabilities().contextWindow);
   };
 
+  const kickTurn = async (text: string, loopId?: string) => {
+    if (busyRef.current) return;
+    const shown = loopId ? `[${loopId}] ${text}` : text;
+    add({ kind: "user", text: shown });
+    if (autoRoute && route) {
+      try {
+        const r = await route(text);
+        switchTo(r.provider, r.label);
+        add({ kind: "system", text: `routed → ${r.tier} (${r.label})` });
+      } catch (e) {
+        add({ kind: "error", text: `route failed: ${String(e)}` });
+      }
+    }
+    commit();
+    setVerb(WORK_VERBS[Math.floor(Math.random() * WORK_VERBS.length)]);
+    const expanded = await expandUserMessage(text, sandbox);
+    const blocked = await agentRef.current.submitPrompt(expanded.text, expanded.extras);
+    if (blocked.blocked) {
+      add({ kind: "error", text: `prompt blocked: ${blocked.reason}` });
+      return;
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+    await drive(controller.signal);
+  };
+  const kickTurnRef = useRef(kickTurn);
+  kickTurnRef.current = kickTurn;
+
   const handleSubmit = async (raw: string) => {
     const v = raw.trim();
     setInput("");
     if (!v) return;
     if (v === "/exit" || v === "/quit") {
+      for (const j of loopsRef.current) clearInterval(j.timer);
+      loopsRef.current = [];
       await agentRef.current.endSession();
       return exit();
     }
     if (busy) return; // a turn is streaming — ignore other submits (esc to interrupt)
-    if (v === "/help") {
+    if (v && historyRef.current[historyRef.current.length - 1] !== v) historyRef.current.push(v);
+    histIdx.current = -1;
+    if (v === "/help" || v === "/") {
+      setShowHelp(true);
+      return;
+    }
+    if (v === "/dashboard" || v === "/agents") {
+      setShowDashboard(true);
+      return;
+    }
+    if (v === "/personas") {
       add({
         kind: "system",
-        text: "/model <provider:model> · /mode <plan|ask|acceptEdits|yolo> · /route <auto|off> · /compact [focus] · /context · /cost · /statusline · /todo · /memory · /image <path> · /rewind · /review · /explore <q> · /skills · /plugins · /mcp · /hooks · /worktree list|apply|remove · /workflows · /workflow <name> · /forme · /deep-research <q> · /deep-research-review <path> · /settings · /keys · /clear · /exit",
+        text: personas.length
+          ? personas.map((p) => `${p.name}  (${p.source})  ${p.description}`).join("\n")
+          : "no personas (add .polycode/personas/<name>.md)",
+      });
+      return;
+    }
+    if (v === "/loop" || v.startsWith("/loop ")) {
+      const parsed = parseLoopCommand(v);
+      if (parsed.op === "list") {
+        const rows = loopsRef.current;
+        add({
+          kind: "system",
+          text: rows.length
+            ? rows
+                .map((j) => `${j.id}  every ${formatLoopInterval(j.intervalMs)}  ${j.prompt}  (${j.fires} fires)`)
+                .join("\n")
+            : "no loops · /loop 5m <prompt> · /loop stop [id]",
+        });
+        return;
+      }
+      if (parsed.op === "stop") {
+        if (!parsed.id) {
+          for (const j of loopsRef.current) clearInterval(j.timer);
+          loopsRef.current = [];
+          add({ kind: "system", text: "loops stopped" });
+          return;
+        }
+        const i = loopsRef.current.findIndex((j) => j.id === parsed.id);
+        if (i < 0) {
+          add({ kind: "error", text: `no loop ${parsed.id}` });
+          return;
+        }
+        clearInterval(loopsRef.current[i].timer);
+        loopsRef.current.splice(i, 1);
+        add({ kind: "system", text: `stopped ${parsed.id}` });
+        return;
+      }
+      if (parsed.op === "usage") {
+        add({ kind: "system", text: parsed.error ?? "usage: /loop 5m <prompt>" });
+        return;
+      }
+      if (loopsRef.current.length >= 4) {
+        add({ kind: "error", text: "too many loops (max 4) · /loop stop" });
+        return;
+      }
+      const id = `l${loopsRef.current.length + 1}`;
+      const timer = setInterval(() => {
+        const job = loopsRef.current.find((j) => j.id === id);
+        if (!job || busyRef.current) return;
+        job.fires++;
+        void kickTurnRef.current(job.prompt, id);
+      }, parsed.intervalMs);
+      loopsRef.current.push({
+        id,
+        intervalMs: parsed.intervalMs,
+        prompt: parsed.prompt,
+        timer,
+        fires: 0,
+      });
+      add({
+        kind: "system",
+        text: `loop ${id} every ${formatLoopInterval(parsed.intervalMs)} · /loop stop ${id}`,
       });
       return;
     }
@@ -402,8 +638,12 @@ export function App({
       add({ kind: "system", text: "open /settings to view and manage keys" });
       return;
     }
-    if (v.startsWith("/mode ")) {
-      const m = v.slice(6).trim() as PermissionMode;
+    if (v === "/mode" || v.startsWith("/mode ")) {
+      const m = v.slice("/mode".length).trim() as PermissionMode;
+      if (!m || !["plan", "ask", "acceptEdits", "yolo"].includes(m)) {
+        add({ kind: "system", text: `mode ${engineRef.current.getMode()} · usage: /mode plan|ask|acceptEdits|yolo` });
+        return;
+      }
       engineRef.current.setMode(m);
       setMode(engineRef.current.getMode());
       add({ kind: "system", text: `mode → ${engineRef.current.getMode()}` });
@@ -608,6 +848,31 @@ export function App({
       add({ kind: "system", text: list });
       return;
     }
+    if (v === "/team" || v.startsWith("/team ")) {
+      const q = v.slice("/team".length).trim();
+      if (!q) {
+        add({ kind: "system", text: "usage: /team <task>  — parallel explore, worktree implement, review" });
+        return;
+      }
+      add({ kind: "system", text: `team: ${q}` });
+      const slug =
+        q
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 48) || "task";
+      try {
+        const host = hostFromSpawn((job) => agentRef.current.spawnChild(job));
+        const { synthesis, parts } = await runWorkflowFile(host, teamWorkflow(), { query: q, slug });
+        const text =
+          synthesis?.output ?? parts.map((p) => p.output).join("\n\n") ?? "(empty team run)";
+        add({ kind: synthesis?.isError ? "error" : "assistant", text });
+      } catch (e) {
+        add({ kind: "error", text: String(e) });
+      }
+      persist();
+      return;
+    }
     if (v === "/deep-research" || v.startsWith("/deep-research ")) {
       const q = v.slice("/deep-research".length).trim();
       if (!q) {
@@ -790,8 +1055,12 @@ export function App({
       persist();
       return;
     }
-    if (v.startsWith("/model ")) {
-      const arg = v.slice(7).trim();
+    if (v === "/model" || v.startsWith("/model ")) {
+      const arg = v.slice("/model".length).trim();
+      if (!arg) {
+        add({ kind: "system", text: `model ${modelLabel} · usage: /model <provider:model>` });
+        return;
+      }
       if (!onModelSwitch) return add({ kind: "error", text: "model switching unavailable" });
       try {
         const next = onModelSwitch(arg);
@@ -803,29 +1072,20 @@ export function App({
       return;
     }
 
-    add({ kind: "user", text: v });
-
-    if (autoRoute && route) {
-      try {
-        const r = await route(v);
-        switchTo(r.provider, r.label);
-        add({ kind: "system", text: `routed → ${r.tier} (${r.label})` });
-      } catch (e) {
-        add({ kind: "error", text: `route failed: ${String(e)}` });
+    if (v.startsWith("/")) {
+      const extra = skills.map((s) => s.name);
+      if (!isKnownSlash(v, extra)) {
+        const name = slashName(v);
+        const hint = didYouMean(name, extra);
+        add({
+          kind: "error",
+          text: hint ? `unknown /${name} · did you mean /${hint}?` : `unknown /${name} · type /help`,
+        });
+        return;
       }
     }
 
-    commit(); // user prompt → Static before the (repainting) turn begins
-    setVerb(WORK_VERBS[Math.floor(Math.random() * WORK_VERBS.length)]);
-    const expanded = await expandUserMessage(v, sandbox);
-    const blocked = await agentRef.current.submitPrompt(expanded.text, expanded.extras);
-    if (blocked.blocked) {
-      add({ kind: "error", text: `prompt blocked: ${blocked.reason}` });
-      return;
-    }
-    const controller = new AbortController();
-    abortRef.current = controller;
-    await drive(controller.signal);
+    await kickTurn(v);
   };
 
   const sandboxLabel = sandbox.root.startsWith("docker:") ? "docker" : "local";
@@ -889,7 +1149,9 @@ export function App({
           paddingX={1}
           marginTop={1}
         >
-          <Text color={theme.warning}>Permission required</Text>
+          <Text color={theme.warning}>
+            Permission required <Text color={theme.dim}>· mode {mode}</Text>
+          </Text>
           <Text>
             {sym.bullet} <Text bold>{cap(perm.tool.name)}</Text>(
             <Text color={theme.dim}>{trunc(formatToolCall(perm.tool.name, perm.input), ARG_WIDTH)}</Text>
@@ -901,11 +1163,39 @@ export function App({
             <Text color={theme.error}>n</Text>/esc deny
           </Text>
         </Box>
+      ) : showHelp ? (
+        <Help skills={skills} onClose={() => setShowHelp(false)} />
+      ) : showDashboard ? (
+        <Dashboard
+          key={dashTick}
+          runs={agentRef.current.listChildren()}
+          personas={personas}
+          onRefresh={() => setDashTick((n) => n + 1)}
+          onKill={(id) => {
+            const r = agentRef.current.killChild(id);
+            add({ kind: "system", text: r.output });
+            setDashTick((n) => n + 1);
+          }}
+          onPeek={(id) => agentRef.current.peekChild(id)}
+          onAttach={(id) => {
+            const p = agentRef.current.peekChild(id);
+            if (!p) {
+              add({ kind: "error", text: `unknown child ${id}` });
+              return;
+            }
+            add({
+              kind: "system",
+              text: `attached ${p.id} (${p.status}) ${p.description}\n${p.output || "(no output yet)"}`,
+            });
+            setShowDashboard(false);
+          }}
+          onClose={() => setShowDashboard(false)}
+        />
       ) : (
         <>
           <Box
             borderStyle="round"
-            borderColor={theme.accent}
+            borderColor={theme[composerBorder(mode)]}
             paddingX={1}
             marginTop={1}
           >
@@ -914,15 +1204,29 @@ export function App({
               value={input}
               onChange={setInput}
               onSubmit={handleSubmit}
-              placeholder="ask anything · / for commands"
+              placeholder={composerPlaceholder(mode)}
             />
           </Box>
+          {input.startsWith("/") && !input.includes(" ")
+            ? matchSlash(input)
+                .slice(0, 6)
+                .map((c) => (
+                  <Text key={c.name} color={theme.dim}>
+                    {"  "}/{c.name}
+                    {c.usage ? ` ${c.usage}` : ""}
+                    {"  "}
+                    {c.summary}
+                  </Text>
+                ))
+            : null}
           <Text color={theme.dim}>
             {busy ? (
               <Text color={theme.accent}>
                 <Spinner type="dots" /> {verb}…{" "}
-                <Text color={theme.dim}>({elapsed}s · esc to interrupt)</Text>
+                <Text color={theme.dim}>({elapsed}s · esc interrupt · Ctrl+B background)</Text>
               </Text>
+            ) : exitHint ? (
+              <Text color={theme.warning}>{"  "}Ctrl+C again to exit</Text>
             ) : (
               <Text>
                 {"  "}

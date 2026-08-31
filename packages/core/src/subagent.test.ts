@@ -6,6 +6,7 @@ import {
   parseChildType,
   toolsForChild,
   registerExtraChildren,
+  systemForChild,
 } from "./subagent.js";
 import type { CanonicalEvent, GenerateRequest, Provider, Sandbox, ToolSpec } from "./types.js";
 
@@ -134,6 +135,13 @@ describe("review write jail", () => {
   });
 });
 
+describe("systemForChild persona overlay", () => {
+  it("appends persona instructions", () => {
+    expect(systemForChild("explore", undefined, "Be terse.")).toContain("<persona>");
+    expect(systemForChild("explore", undefined, "Be terse.")).toContain("Be terse.");
+  });
+});
+
 describe("Agent.spawnChild", () => {
   it("returns only the child's final text and does not leak child tools into parent history", async () => {
     const provider = new ScriptedProvider([
@@ -206,6 +214,111 @@ describe("Agent.spawnChild", () => {
     expect(events.some((e) => e.type === "text_delta" && e.text === "parent-done")).toBe(true);
     // Child explore tools exclude `task`, so a nested spawn never ran.
     expect(out).not.toMatch(/nested spawn blocked|depth 1/);
+  });
+
+  it("background spawn returns an id and waitChild collects", async () => {
+    const provider: Provider = {
+      id: "test",
+      model: "slow",
+      capabilities: () => capabilities,
+      async *stream() {
+        await new Promise((r) => setTimeout(r, 25));
+        yield { type: "text_delta", text: "bg-done" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    const r = await parent.spawnChild({
+      description: "look",
+      prompt: "go",
+      subagent_type: "explore",
+      background: true,
+    });
+    expect(r.output).toMatch(/background child c1/);
+    expect(parent.listChildren()[0].status).toBe("running");
+    const waited = await parent.waitChild("c1", 1000);
+    expect(waited.output).toContain("bg-done");
+    expect(parent.listChildren()[0].status).toBe("completed");
+  });
+
+  it("refuses background writers in ask mode", async () => {
+    const provider = new ScriptedProvider([[{ type: "stop", reason: "end_turn" }]]);
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    const r = await parent.spawnChild({
+      description: "edit",
+      prompt: "x",
+      subagent_type: "general",
+      background: true,
+    });
+    expect(r.isError).toBe(true);
+    expect(r.output).toMatch(/acceptEdits or yolo/);
+  });
+
+  it("resume_from continues a completed child", async () => {
+    const provider = new ScriptedProvider([
+      [{ type: "text_delta", text: "first-pass" }, { type: "stop", reason: "end_turn" }],
+      [{ type: "text_delta", text: "second-pass" }, { type: "stop", reason: "end_turn" }],
+    ]);
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    await parent.spawnChild({ description: "e", prompt: "one", subagent_type: "explore" });
+    const id = parent.listChildren()[0].id;
+    const r = await parent.spawnChild({ description: "e2", prompt: "two", resume_from: id });
+    expect(r.output).toContain("second-pass");
+    expect(parent.listChildren()).toHaveLength(2);
+  });
+
+  it("injects persona instructions into the child system prompt", async () => {
+    let seen = "";
+    const provider: Provider = {
+      id: "test",
+      model: "p",
+      capabilities: () => capabilities,
+      async *stream(req) {
+        seen = req.system ?? "";
+        yield { type: "text_delta", text: "ok" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), {
+      sandbox,
+      personas: [{ name: "terse", description: "t", instructions: "THREE BULLETS ONLY", source: "project" }],
+    });
+    await parent.spawnChild({
+      description: "e",
+      prompt: "x",
+      subagent_type: "explore",
+      persona: "terse",
+    });
+    expect(seen).toContain("THREE BULLETS ONLY");
+  });
+
+  it("detachRunningChildren backgrounds a foreground child instead of killing it", async () => {
+    const provider: Provider = {
+      id: "test",
+      model: "slow",
+      capabilities: () => capabilities,
+      async *stream() {
+        await new Promise((r) => setTimeout(r, 40));
+        yield { type: "text_delta", text: "survived" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    const ac = new AbortController();
+    const pending = parent.spawnChild(
+      { description: "fg", prompt: "go", subagent_type: "explore" },
+      ac.signal,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(parent.listChildren()[0].status).toBe("running");
+    const ids = parent.detachRunningChildren();
+    ac.abort();
+    const r = await pending;
+    expect(ids).toEqual(["c1"]);
+    expect(r.output).toMatch(/backgrounded c1/);
+    const waited = await parent.waitChild("c1", 1000);
+    expect(waited.output).toContain("survived");
+    expect(parent.listChildren()[0].status).toBe("completed");
   });
 });
 

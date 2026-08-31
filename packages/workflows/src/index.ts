@@ -14,6 +14,7 @@ export {
   type WorkflowJobSpec,
 } from "./runner.js";
 export { deepResearchWorkflow } from "./deep-research.js";
+export { teamWorkflow } from "./team.js";
 export {
   loadWorkflows,
   bundledWorkflows,
