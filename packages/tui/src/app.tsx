@@ -53,10 +53,9 @@ import {
   completeSlash,
   composerBorder,
   composerPlaceholder,
-  didYouMean,
   isKnownSlash,
+  unknownSlashMessage,
   matchSlash,
-  slashName,
 } from "./commands.js";
 import {
   DEFAULT_STATUS_TEMPLATE,
@@ -133,6 +132,7 @@ export interface AppProps {
 interface PendingPerm {
   tool: ToolSpec;
   input: unknown;
+  repeat?: boolean;
   resolve: (choice: PermissionChoice) => void;
 }
 
@@ -224,7 +224,7 @@ export function App({
     );
 
   const promptPermission = useCallback(
-    (req: { tool: ToolSpec; input: unknown }) =>
+    (req: { tool: ToolSpec; input: unknown; repeat?: boolean }) =>
       new Promise<PermissionChoice>((resolve) => setPerm({ ...req, resolve })),
     [],
   );
@@ -1126,12 +1126,7 @@ export function App({
     if (v.startsWith("/")) {
       const extra = skills.map((s) => s.name);
       if (!isKnownSlash(v, extra)) {
-        const name = slashName(v);
-        const hint = didYouMean(name, extra);
-        add({
-          kind: "error",
-          text: hint ? `unknown /${name} · did you mean /${hint}?` : `unknown /${name} · type /help`,
-        });
+        add({ kind: "system", text: unknownSlashMessage(v, extra) });
         return;
       }
     }
@@ -1209,9 +1204,19 @@ export function App({
             ) <Text color={theme.dim}>[{perm.tool.permission}]</Text>
           </Text>
           <Text color={theme.dim}>
-            <Text color={theme.success}>y</Text>/enter allow once ·{" "}
-            <Text color={theme.success}>a</Text> allow for session ·{" "}
-            <Text color={theme.error}>n</Text>/esc deny
+            {perm.repeat ? (
+              <>
+                <Text color={theme.success}>a</Text> allow {perm.tool.name} for this session (stops these
+                prompts) · <Text color={theme.success}>y</Text> once ·{" "}
+                <Text color={theme.error}>n</Text> deny
+              </>
+            ) : (
+              <>
+                <Text color={theme.success}>y</Text>/enter once ·{" "}
+                <Text color={theme.success}>a</Text> allow {perm.tool.name} for this session ·{" "}
+                <Text color={theme.error}>n</Text>/esc deny
+              </>
+            )}
           </Text>
         </Box>
       ) : showHelp ? (

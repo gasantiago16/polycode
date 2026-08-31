@@ -6,6 +6,7 @@ import {
   isKnownSlash,
   matchSlash,
   slashName,
+  unknownSlashMessage,
 } from "./commands.js";
 
 describe("slash catalog", () => {
@@ -31,6 +32,9 @@ describe("slash catalog", () => {
     expect(isKnownSlash("/forme", ["forme"])).toBe(true);
     expect(didYouMean("hepl")).toBe("help");
     expect(didYouMean("crnky")).toBe("review");
+    expect(unknownSlashMessage("/hepl")).toMatch(/not sent to the model/i);
+    expect(unknownSlashMessage("/hepl")).toMatch(/did you mean \/help/i);
+    expect(unknownSlashMessage("/hepl")).not.toMatch(/^unknown /);
   });
 
   it("changes the composer hint in plan and yolo", () => {

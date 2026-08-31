@@ -171,6 +171,43 @@ describe("Agent.spawnChild", () => {
     expect(r.output).toMatch(/depth 1/);
   });
 
+  it("worktree children in ask mode do not hit the parent permission prompt", async () => {
+    const prompt = vi.fn(async () => "deny" as const);
+    const writeTool: ToolSpec = {
+      name: "write",
+      description: "",
+      parameters: {},
+      permission: "mutating",
+      parallelSafe: false,
+      async run() {
+        return { output: "wrote" };
+      },
+    };
+    const provider = new ScriptedProvider([
+      [
+        {
+          type: "tool_call",
+          call: { type: "tool_call", id: "1", name: "write", input: { path: "a.ts", content: "x" } },
+        },
+        { type: "stop", reason: "tool_use" },
+      ],
+      [{ type: "text_delta", text: "done" }, { type: "stop", reason: "end_turn" }],
+    ]);
+    const parent = new Agent(provider, [writeTool], new PermissionEngine("ask", prompt), {
+      sandbox,
+      openWorktree: async () => ({ sandbox, path: "/tmp/wt-silent" }),
+    });
+    const r = await parent.spawnChild({
+      description: "impl",
+      prompt: "edit",
+      subagent_type: "general",
+      isolation: "worktree",
+    });
+    expect(prompt).not.toHaveBeenCalled();
+    expect(r.isError).toBeFalsy();
+    expect(r.output).toContain("done");
+  });
+
   it("errors when worktree isolation is requested without a factory", async () => {
     const provider = new ScriptedProvider([[{ type: "stop", reason: "end_turn" }]]);
     const parent = new Agent(provider, [read, task], new PermissionEngine("ask", async () => "deny"), {

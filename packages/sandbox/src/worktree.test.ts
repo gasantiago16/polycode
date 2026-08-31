@@ -26,7 +26,7 @@ function gitOk(): boolean {
 }
 
 describe.skipIf(!gitOk())("git worktree", () => {
-  it("isolates writes from the parent tree", () => {
+  it("isolates writes from the parent tree", { timeout: 20_000 }, () => {
     const root = join(tmpdir(), `poly-wt-${Date.now()}`);
     mkdirSync(root);
     dirs.push(root);

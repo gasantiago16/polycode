@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>polycode beta survey</title>
+<style>
+  :root {
+    --bg: #1c2128;
+    --fg: #e6edf3;
+    --muted: #8b949e;
+    --card: #252b33;
+    --bd: #3d444d;
+    --accent: #d97757;
+    --ok: #9ece6a;
+    --bad: #f7768e;
+    --skip: #e0af68;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 16px/1.5 -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    color: var(--fg);
+    background: var(--bg);
+  }
+  main { max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 1.6rem; margin: 0 0 8px; }
+  h2 { font-size: 1.15rem; margin: 28px 0 12px; color: var(--accent); }
+  p.lead { color: var(--muted); margin: 0 0 24px; }
+  .warn { color: var(--skip); font-size: 0.92rem; }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin: 12px 0 4px; }
+  input[type="text"], input[type="number"], textarea, select {
+    width: 100%;
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--bd);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+  }
+  textarea { min-height: 72px; resize: vertical; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--bd); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #2b323b; }
+  .try { color: var(--fg); }
+  .expect { color: var(--muted); font-size: 0.85rem; }
+  .pf { white-space: nowrap; }
+  .stars { display: flex; gap: 6px; flex-wrap: wrap; }
+  .stars label { margin: 0; color: var(--fg); font-size: 0.9rem; }
+  .actions { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0; display: flex; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--bd); margin-top: 28px; }
+  button {
+    background: var(--accent);
+    color: #1c2128;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  button.secondary { background: var(--card); color: var(--fg); border: 1px solid var(--bd); }
+  .saved { color: var(--ok); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>polycode beta survey</h1>
+  <p class="lead">After a TUI session (~10 min). <span class="warn">Do not paste API keys.</span></p>
+
+  <div class="row">
+    <div>
+      <label for="name">Name</label>
+      <input id="name" type="text" autocomplete="name" />
+    </div>
+    <div>
+      <label for="spent">Minutes spent</label>
+      <input id="spent" type="number" min="1" step="1" />
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="os">OS</label>
+      <select id="os">
+        <option>Windows</option>
+        <option>macOS</option>
+        <option>Linux</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div>
+      <label for="term">Terminal</label>
+      <input id="term" type="text" placeholder="Windows Terminal / macOS Terminal / …" />
+    </div>
+  </div>
+
+  <h2>First run</h2>
+  <table>
+    <thead><tr><th>Check</th><th class="pf">Result</th></tr></thead>
+    <tbody id="first"></tbody>
+  </table>
+  <label for="stuck">Stuck on settings? What did you see?</label>
+  <textarea id="stuck"></textarea>
+
+  <h2>Try these (ask mode, not yolo)</h2>
+  <table>
+    <thead><tr><th>Try / expect</th><th class="pf">Result</th><th>Notes</th></tr></thead>
+    <tbody id="tries"></tbody>
+  </table>
+
+  <h2>Ratings (1 broken · 5 I’d use this)</h2>
+  <table>
+    <thead><tr><th>Area</th><th>1–5</th></tr></thead>
+    <tbody id="ratings"></tbody>
+  </table>
+  <label for="again">Would you use this again?</label>
+  <select id="again">
+    <option value="">—</option>
+    <option>Yes</option>
+    <option>Maybe</option>
+    <option>No</option>
+  </select>
+
+  <h2>Open</h2>
+  <label for="good">What felt good?</label>
+  <textarea id="good"></textarea>
+  <label for="bad">What was confusing or broken?</label>
+  <textarea id="bad"></textarea>
+  <label for="fix">One thing to fix before the next person sits down</label>
+  <textarea id="fix"></textarea>
+  <label for="else">Anything else?</label>
+  <textarea id="else"></textarea>
+
+  <div class="actions">
+    <button type="button" id="dl">Download answers (.md)</button>
+    <button type="button" class="secondary" id="copy">Copy markdown</button>
+    <span class="saved" id="status"></span>
+  </div>
+</main>
+<script>
+const FIRST = [
+  ["install", "`corepack pnpm install` then `corepack pnpm dev` started"],
+  ["firstrun", "Arrow to **xAI (Grok)** (not Meta Muse), pasted key, landed in chat"],
+  ["noloop", "If already keyed: chat opened without a settings loop"],
+];
+const TRIES = [
+  ["help", "`/help`", "Overlay; Esc closes"],
+  ["tab", "`/mo` then Tab", "Completes toward `/mode` or `/model`"],
+  ["repo", "`what is this repo?`", "Tools run; answer cites files"],
+  ["plan", "`/mode plan` then “edit README”", "Writes refused"],
+  ["ask", "`/mode ask` then a tiny edit", "`y` / `a` / `n` prompt"],
+  ["team", "`/team add a comment in README`", "Explorers, then worktree implement"],
+  ["dash", "`/dashboard` or Ctrl+\\\\", "Child list; Enter peek; `a` attach"],
+  ["ctrlb", "Long turn + **Ctrl+B**", "Composer back; kids still in dashboard"],
+  ["loop", "`/loop 15s say ping` then `/loop stop`", "Recurring line, then stops"],
+  ["typo", "`/hepl`", "Suggests `/help` — not sent to Grok"],
+  ["resume", "`/exit` then `pnpm dev -- --continue`", "Session resumes"],
+];
+const RATINGS = [
+  ["setup", "Getting in (install + first run)"],
+  ["chat", "Chat / streaming feel"],
+  ["slash", "Slash commands + Tab complete"],
+  ["perms", "Permission prompts (plan / ask)"],
+  ["teamr", "Multi-agent (`/team`, dashboard, Ctrl+B)"],
+  ["overall", "Overall vs Cursor / Claude Code / Grok Build"],
+];
+
+function radios(name) {
+  return `<label><input type="radio" name="${name}" value="pass" /> pass</label>
+    <label><input type="radio" name="${name}" value="fail" /> fail</label>
+    <label><input type="radio" name="${name}" value="skip" /> skip</label>`;
+}
+function stars(name) {
+  let s = `<div class="stars">`;
+  for (let i = 1; i <= 5; i++) s += `<label><input type="radio" name="${name}" value="${i}" /> ${i}</label>`;
+  return s + `</div>`;
+}
+document.getElementById("first").innerHTML = FIRST.map(([id, t]) =>
+  `<tr><td>${t}</td><td class="pf">${radios("f_"+id)}</td></tr>`
+).join("");
+document.getElementById("tries").innerHTML = TRIES.map(([id, tryT, exp]) =>
+  `<tr><td><div class="try">${tryT}</div><div class="expect">${exp}</div></td>
+   <td class="pf">${radios("t_"+id)}</td>
+   <td><input type="text" id="n_${id}" /></td></tr>`
+).join("");
+document.getElementById("ratings").innerHTML = RATINGS.map(([id, t]) =>
+  `<tr><td>${t}</td><td>${stars("r_"+id)}</td></tr>`
+).join("");
+
+function val(id) { return (document.getElementById(id)?.value || "").trim(); }
+function radio(name) {
+  const n = document.querySelector(`input[name="${name}"]:checked`);
+  return n ? n.value : "";
+}
+function md() {
+  const when = new Date().toISOString();
+  const lines = [
+    "# polycode beta survey",
+    "",
+    `- **When:** ${when}`,
+    `- **Tester:** ${val("name") || "(unnamed)"}`,
+    `- **Minutes:** ${val("spent") || "?"}`,
+    `- **OS:** ${val("os")} · ${val("term") || "(terminal ?)"}`,
+    `- **Use again:** ${val("again") || "?"}`,
+    "",
+    "Do not paste API keys. Safe to drop in `.polycode/beta-logs/`.",
+    "",
+    "## First run",
+    "",
+  ];
+  for (const [id, t] of FIRST) lines.push(`- [${radio("f_"+id) === "pass" ? "x" : " "}] ${t} — ${radio("f_"+id) || "unset"}`);
+  if (val("stuck")) lines.push("", "Stuck notes:", "", val("stuck"));
+  lines.push("", "## Tries", "");
+  for (const [id, tryT, exp] of TRIES) {
+    const r = radio("t_"+id) || "unset";
+    const n = val("n_"+id);
+    lines.push(`- [${r === "pass" ? "x" : " "}] ${tryT} — ${r}${n ? ` — ${n}` : ""}`);
+    lines.push(`  expect: ${exp}`);
+  }
+  lines.push("", "## Ratings", "");
+  for (const [id, t] of RATINGS) lines.push(`- ${t}: ${radio("r_"+id) || "?"}/5`);
+  lines.push("", "## Open", "", "### Felt good", "", val("good") || "(blank)", "", "### Confusing / broken", "", val("bad") || "(blank)", "", "### Fix first", "", val("fix") || "(blank)", "", "### Else", "", val("else") || "(blank)", "");
+  return lines.join("\n");
+}
+function download() {
+  const body = md();
+  const who = (val("name") || "buddy").replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 40);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const blob = new Blob([body], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${stamp}_${who}_survey.md`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  document.getElementById("status").textContent = "downloaded — drop the file in .polycode/beta-logs/";
+}
+function copy() {
+  navigator.clipboard.writeText(md()).then(() => {
+    document.getElementById("status").textContent = "copied markdown";
+  });
+}
+document.getElementById("dl").onclick = download;
+document.getElementById("copy").onclick = copy;
+try {
+  const raw = localStorage.getItem("polycode-beta-survey");
+  if (raw) {
+    const s = JSON.parse(raw);
+    for (const [k, v] of Object.entries(s.fields || {})) {
+      const el = document.getElementById(k);
+      if (el) el.value = v;
+    }
+    for (const [k, v] of Object.entries(s.radios || {})) {
+      const el = document.querySelector(`input[name="${k}"][value="${v}"]`);
+      if (el) el.checked = true;
+    }
+  }
+} catch {}
+function persist() {
+  const fields = {};
+  for (const id of ["name","spent","os","term","stuck","again","good","bad","fix","else", ...TRIES.map(([id]) => "n_"+id)]) {
+    const el = document.getElementById(id);
+    if (el) fields[id] = el.value;
+  }
+  const radios = {};
+  document.querySelectorAll('input[type="radio"]:checked').forEach((el) => { radios[el.name] = el.value; });
+  localStorage.setItem("polycode-beta-survey", JSON.stringify({ fields, radios }));
+}
+document.addEventListener("input", persist);
+document.addEventListener("change", persist);
+</script>
+</body>
+</html>

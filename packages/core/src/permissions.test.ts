@@ -102,6 +102,27 @@ describe("PermissionEngine", () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 
+  it("forkIsolated ask auto-allows worktree writes and bash without prompting", async () => {
+    const prompt = vi.fn(async () => "deny" as const);
+    const isolated = new PermissionEngine("ask", prompt).forkIsolated();
+    expect(isolated.getMode()).toBe("acceptEdits");
+    expect(isolated.isSilent()).toBe(true);
+    expect((await isolated.check(tool("write", "mutating"), { path: "a.ts" })).allow).toBe(true);
+    expect((await isolated.check(tool("bash", "dangerous"), { command: "npm test" })).allow).toBe(true);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("marks the second prompt for the same tool as repeat", async () => {
+    const seen: boolean[] = [];
+    const engine = new PermissionEngine("ask", async (req) => {
+      seen.push(!!req.repeat);
+      return "once";
+    });
+    await engine.check(tool("bash", "dangerous"), { command: "a" });
+    await engine.check(tool("bash", "dangerous"), { command: "b" });
+    expect(seen).toEqual([false, true]);
+  });
+
   it("forkSilent acceptEdits auto-allows dangerous tools without prompting", async () => {
     const prompt = vi.fn(async () => "deny" as const);
     const silent = new PermissionEngine("acceptEdits", prompt).forkSilent();

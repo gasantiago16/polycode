@@ -454,7 +454,12 @@ export class Agent {
       }
       const detachedFromParent = !!(signal && !input.background && !handle.unlinkParent);
       const silent = input.background || this.silentChildSpawns || detachedFromParent;
-      const childPerms = silent ? this.permissions.forkSilent() : this.permissions.forkInteractive();
+      const isolatedWrite = isolation === "worktree" && parentMode !== "plan";
+      const childPerms = isolatedWrite
+        ? this.permissions.forkIsolated()
+        : silent
+          ? this.permissions.forkSilent()
+          : this.permissions.forkInteractive();
       const child = new Agent(this.provider, toolsForChild(type, this.tools), childPerms, {
         sandbox: childSandbox,
         system: systemForChild(type, this.opts.system, persona?.instructions),

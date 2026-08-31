@@ -52,7 +52,9 @@ describe("editing tools", () => {
     await ctx.sandbox.writeFile("top.ts", "");
     await ctx.sandbox.writeFile("src/nested.ts", "");
     const result = await glob.run({ pattern: "**/*.ts" }, ctx);
-    expect(result.output.split("\n").sort()).toEqual(["src/nested.ts", "top.ts"]);
+    const lines = result.output.split("\n");
+    expect(lines[0]).toBe("2 files");
+    expect(lines.slice(1).sort()).toEqual(["src/nested.ts", "top.ts"]);
     expect(root).toBeTruthy();
   });
 
