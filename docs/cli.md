@@ -44,6 +44,10 @@ Sessions are stored as `<cwd>/.polycode/sessions/<id>.json` and saved after each
 | `/context` | Token breakdown vs the model window. |
 | `/review` (`/cranky`) | Spawn a depth-1 reviewer child on the local git diff. |
 | `/explore <q>` | Spawn a read-only explore child. |
+| `/team <task>` | Parallel explore (code + verify), then implement in a git worktree, then review. `/worktree apply` to copy back. |
+| `/dashboard` (`/agents`, `Ctrl+\`) | Child agents. Enter/`p` peek live output · `a` attach into the transcript · `x` kill. |
+| `/loop [5m] <prompt>` | Recurring prompt (min 15s). `/loop` lists, `/loop stop [id]` cancels. Skips a tick if a turn is already running. |
+| `/personas` | Persona overlays from `.polycode/personas/*.md`. Pass `persona` on `task`. |
 | `/skills` | List loaded skills (bundled forme, matsumura-style, deep-research). |
 | `/mcp` | MCP servers from `.polycode/mcp.json` (fail-soft connect). Notes deferred schemas. |
 | `/plugins` | Loaded plugin bundles (`.polycode/plugins/<name>`). |
@@ -67,8 +71,8 @@ Sessions are stored as `<cwd>/.polycode/sessions/<id>.json` and saved after each
 | `/rewind` (`/undo`) | Restore files from the last mutating-tool checkpoint and drop that turn. |
 | `/settings` (or `/login`) | Open the API-key Settings screen (paste / import-env / open-page / validate / agentic). |
 | `/clear` | Clear the transcript. |
-| `/help` | List commands. |
-| `/exit` (or `/quit`) | Quit. |
+| `/help` | Command overlay (also `/`). Tab completes; ↑↓ history. |
+| `/exit` (or `/quit`) | Quit. Ctrl+C interrupts a turn; twice quits. |
 
 ## Permission prompt
 
@@ -78,6 +82,8 @@ class, and the call. Answer with:
 - `y` / `Enter` — allow once
 - `a` — allow this tool for the rest of the session (sticky; `plan` mode still overrides)
 - `n` / `Esc` — deny
+
+While a turn is running: **Esc** interrupts (kills foreground children). **Ctrl+B** detaches running children and frees the composer (`/dashboard` to peek/attach).
 
 A denied call is reported back to the model so it can adapt.
 

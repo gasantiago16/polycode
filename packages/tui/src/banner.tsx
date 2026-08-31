@@ -25,7 +25,10 @@ export function Banner({ cwd }: BannerProps) {
       </Text>
       <Text> </Text>
       <Text color={theme.dim}>
-        {"  "}/help commands · /settings API keys · /model switch model · /exit quit
+        {"  "}Ask about this repo · /help commands · tab completes · ↑↓ history
+      </Text>
+      <Text color={theme.dim}>
+        {"  "}/settings keys · /mode plan|ask · esc interrupt · Ctrl+C twice to quit
       </Text>
       <Text color={theme.dim}>
         {"  "}cwd: {cwd}

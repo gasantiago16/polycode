@@ -1,5 +1,6 @@
-import type { ToolSpec } from "./types.js";
+import type { PermissionClass, ToolSpec } from "./types.js";
 import { commandTouchesProtected, isProtectedProjectPath } from "./paths.js";
+import { isReadOnlyTask } from "./subagent.js";
 
 export interface PermissionRule {
   /** Canonical tool name (read, write, bash, …) or `*` */
@@ -129,13 +130,24 @@ export class PermissionEngine {
     return this.mode;
   }
 
+  /**
+   * Silent engine for background children (cannot pop the TUI prompt).
+   * yolo/acceptEdits stay writable; ask/plan become plan (read-only).
+   */
+  forkSilent(): PermissionEngine {
+    const mode: PermissionMode =
+      this.mode === "yolo" || this.mode === "acceptEdits" ? this.mode : "plan";
+    return new PermissionEngine(mode, async () => "deny", this.rules);
+  }
+
   /** Tool names granted "always allow" this session (for UI display). */
   sessionGrants(): string[] {
     return [...this.sessionAllowed];
   }
 
   async check(tool: ToolSpec, input: unknown): Promise<PermissionDecision> {
-    const cls = tool.permission;
+    const cls: PermissionClass =
+      tool.name === "task" && isReadOnlyTask(input) ? "safe" : tool.permission;
 
     const deny = this.rules.find((r) => r.action === "deny" && ruleMatches(r, tool.name, input));
     if (deny) return { allow: false, reason: `denied by rule ${deny.tool}(${deny.pattern ?? ""})` };

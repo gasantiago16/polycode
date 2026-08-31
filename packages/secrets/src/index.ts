@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, chmodSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -35,6 +35,7 @@ export const ENV_VAR: Record<ProviderId, string> = {
 /** Extra env names accepted when reading (hydrate copies them onto ENV_VAR). */
 export const ENV_ALIASES: Partial<Record<ProviderId, string[]>> = {
   google: ["GEMINI_API_KEY"],
+  xai: ["GROK_API_KEY"],
   muse: ["MODEL_API_KEY"],
   qwen: ["QWEN_API_KEY"],
 };
@@ -210,12 +211,51 @@ export function importFromEnv(): ProviderId[] {
 
 /**
  * Copy stored keys into process.env so the AI SDK provider factory (which reads
- * env) can see them. Does not overwrite an existing env/.env value.
+ * env) can see them. Does not overwrite an existing env/.env value. Also fills
+ * aliases (GROK_API_KEY, MODEL_API_KEY, …) so compat endpoints see the key.
  */
 export function hydrateEnv(): void {
   for (const p of PROVIDERS) {
-    if (process.env[ENV_VAR[p]]) continue;
     const v = getKey(p);
-    if (v) process.env[ENV_VAR[p]] = v;
+    if (!v) continue;
+    if (!process.env[ENV_VAR[p]]) process.env[ENV_VAR[p]] = v;
+    for (const a of ENV_ALIASES[p] ?? []) {
+      if (!process.env[a]) process.env[a] = v;
+    }
   }
+}
+
+export function envFileCandidates(cwd: string): string[] {
+  return [join(cwd, ".env"), join(configDir, ".env")];
+}
+
+/** Load KEY=VALUE lines from `.env` files. Existing process.env wins. */
+export function loadDotEnvFiles(files: string[]): string[] {
+  const loaded: string[] = [];
+  for (const f of files) {
+    if (!existsSync(f)) continue;
+    let text: string;
+    try {
+      text = readFileSync(f, "utf8");
+    } catch {
+      continue;
+    }
+    if (text.length > 64_000) text = text.slice(0, 64_000);
+    for (const line of text.split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const m = t.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+      if (!m) continue;
+      let val = m[2].trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (process.env[m[1]] == null || process.env[m[1]] === "") process.env[m[1]] = val;
+    }
+    loaded.push(f);
+  }
+  return loaded;
 }

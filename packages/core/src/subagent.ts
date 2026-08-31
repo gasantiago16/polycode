@@ -28,6 +28,18 @@ export function listExtraChildren(): ExtraChildDef[] {
   return [...extraChildren.values()];
 }
 
+/** Explore / researcher children only read; they can run in parallel on the parent tree. */
+export function isReadOnlyTask(input: unknown): boolean {
+  const rec = (input ?? {}) as Record<string, unknown>;
+  const type = String(rec.subagent_type ?? "general").toLowerCase();
+  return type === "explore" || type === "researcher";
+}
+
+export function taskWantsWorktree(input: unknown): boolean {
+  const rec = (input ?? {}) as Record<string, unknown>;
+  return rec.isolation === "worktree";
+}
+
 export function parseChildType(raw?: string): string {
   const t = (raw ?? "general").trim().toLowerCase();
   if (t === "explore" || t === "review" || t === "general" || t === "researcher") return t;
@@ -41,8 +53,10 @@ const EXPLORE_TOOLS = new Set(["read", "grep", "ls", "glob", "lsp"]);
 const REVIEW_TOOLS = new Set(["read", "grep", "ls", "glob", "write", "lsp"]);
 const RESEARCHER_TOOLS = new Set(["read", "grep", "ls", "glob", "web_fetch", "web_search"]);
 
+const PARENT_ONLY = new Set(["task", "task_wait", "task_kill"]);
+
 export function toolsForChild(type: string, parentTools: ToolSpec[]): ToolSpec[] {
-  const withoutTask = parentTools.filter((t) => t.name !== "task");
+  const withoutTask = parentTools.filter((t) => !PARENT_ONLY.has(t.name));
   const extra = extraChildren.get(type);
   if (extra) {
     if (!extra.tools?.length) return withoutTask;
@@ -74,15 +88,17 @@ function jailWrite(write: ToolSpec): ToolSpec {
   };
 }
 
-export function systemForChild(type: string, parentSystem?: string): string {
+export function systemForChild(type: string, parentSystem?: string, persona?: string): string {
   const base = parentSystem ? `Project context:\n${parentSystem}\n\n` : "";
+  const overlay = persona?.trim() ? `\n\n<persona>\n${persona.trim()}\n</persona>` : "";
   const extra = extraChildren.get(type);
-  if (extra) return base + extra.system;
+  if (extra) return base + extra.system + overlay;
   if (type === "explore") {
     return (
       base +
       "You are an explore subagent. Read-only. Use read/grep/ls/glob to answer the prompt. " +
-      "Do not suggest edits as if you made them. Return a concise summary of what you found."
+      "Do not suggest edits as if you made them. Return a concise summary of what you found." +
+      overlay
     );
   }
   if (type === "researcher") {
@@ -90,7 +106,8 @@ export function systemForChild(type: string, parentSystem?: string): string {
       base +
       "You are a research subagent. Use web_search then web_fetch on primary sources (papers, official docs, mailing lists). " +
       "Do not answer from memory. Cite URLs. If you cannot fetch a primary, say unknown — not holds. " +
-      "Return: verdict, 3-8 URLs, best attack on the claim, what would change the verdict."
+      "Return: verdict, 3-8 URLs, best attack on the claim, what would change the verdict." +
+      overlay
     );
   }
   if (type === "review") {
@@ -98,13 +115,15 @@ export function systemForChild(type: string, parentSystem?: string): string {
       base +
       REVIEW_PERSONA +
       "\n\nWrite findings to the review file path given in the user prompt. " +
-      "That file is the only write you may perform. Do not edit project source."
+      "That file is the only write you may perform. Do not edit project source." +
+      overlay
     );
   }
   return (
     base +
     "You are a delegated coding subagent. Solve the prompt. You cannot spawn further subagents. " +
-    "Return a short final summary of what you did."
+    "Return a short final summary of what you did." +
+    overlay
   );
 }
 
