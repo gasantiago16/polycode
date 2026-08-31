@@ -177,7 +177,8 @@ const multiEdit: ToolSpec = {
 
 const bash: ToolSpec = {
   name: "bash",
-  description: "Run a shell command in the project root (sandboxed). Use sparingly.",
+  description:
+    "Run a shell command in the project root (sandboxed). Do NOT use bash to list, find, or count files — use glob (returns a count), grep, ls, or read. Prefer bash for tests, builds, and git. Host is often Windows: no wc/rg unless installed.",
   permission: "dangerous",
   parallelSafe: false,
   parameters: {
@@ -271,7 +272,8 @@ const ls: ToolSpec = {
 
 const glob: ToolSpec = {
   name: "glob",
-  description: "List files matching a simple glob (supports * and **).",
+  description:
+    "List files matching a glob (* and **). First line is the match count — use this instead of bash/find/wc to count files (e.g. **/*.py).",
   permission: "safe",
   parallelSafe: true,
   parameters: {
@@ -287,7 +289,10 @@ const glob: ToolSpec = {
       if (re.test(file)) out.push(file);
       if (out.length > 1000) break;
     }
-    return { output: clamp(out.join("\n") || "(no matches)") };
+    if (!out.length) return { output: "(no matches)" };
+    const n = out.length;
+    const noun = n === 1 ? "file" : "files";
+    return { output: clamp(`${n} ${noun}\n${out.join("\n")}`) };
   },
 };
 

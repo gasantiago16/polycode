@@ -71,8 +71,13 @@ corepack pnpm dev
 
 ## After the session
 
+Give them the survey (pick one):
+
+- Fill-in page: open [`beta-survey.html`](beta-survey.html) in a browser — Download answers, drop the `.md` in `.polycode/beta-logs/`
+- Markdown: [`beta-survey.md`](beta-survey.md)
+
 ```powershell
 corepack pnpm beta -- --tester buddy-name --checklist-only
 ```
 
-Fill the checklist in the new file, keep it in `.polycode/beta-logs/`, and tell you what failed.
+Keep the filled survey in `.polycode/beta-logs/`. Not `.env`, not the keychain.

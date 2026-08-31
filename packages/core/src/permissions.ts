@@ -29,6 +29,8 @@ export type PermissionChoice = "once" | "always" | "deny";
 export type PermissionPrompt = (req: {
   tool: ToolSpec;
   input: unknown;
+  /** True when this tool already prompted earlier in the session (nudge toward "always"). */
+  repeat?: boolean;
 }) => Promise<PermissionChoice>;
 
 /**
@@ -116,6 +118,7 @@ export function isProtectedInput(input: unknown): boolean {
 export class PermissionEngine {
   /** Tools the user chose to allow for the rest of the session ("always"). */
   private sessionAllowed = new Set<string>();
+  private promptedTools = new Set<string>();
   private silent = false;
   private promptGen = 0;
 
@@ -162,6 +165,19 @@ export class PermissionEngine {
     return child;
   }
 
+  /**
+   * Worktree children cannot clobber the parent tree until /worktree apply.
+   * ask/acceptEdits → silent acceptEdits (writes + bash, no TUI spam). plan stays plan.
+   */
+  forkIsolated(): PermissionEngine {
+    if (this.mode === "plan") return this.forkSilent();
+    const mode: PermissionMode = this.mode === "yolo" ? "yolo" : "acceptEdits";
+    const child = new PermissionEngine(mode, async () => "deny", this.rules);
+    child.silent = true;
+    for (const t of this.sessionAllowed) child.sessionAllowed.add(t);
+    return child;
+  }
+
   /** Tool names granted "always allow" this session (for UI display). */
   sessionGrants(): string[] {
     return [...this.sessionAllowed];
@@ -201,7 +217,9 @@ export class PermissionEngine {
       return { allow: false, reason: "background child cannot prompt" };
     }
     const gen = this.promptGen;
-    const choice = await this.prompt({ tool, input });
+    const repeat = this.promptedTools.has(tool.name);
+    this.promptedTools.add(tool.name);
+    const choice = await this.prompt({ tool, input, repeat });
     if (gen !== this.promptGen) return { allow: false, reason: "background child cannot prompt" };
     if (choice === "always") {
       this.sessionAllowed.add(tool.name);

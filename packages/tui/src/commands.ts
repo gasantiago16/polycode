@@ -98,6 +98,14 @@ export function isKnownSlash(line: string, extra: string[] = []): boolean {
   return extra.some((s) => s.toLowerCase() === name);
 }
 
+/** User-facing copy for a slash the catalog does not know. Never sent to the model. */
+export function unknownSlashMessage(line: string, extra: string[] = []): string {
+  const name = slashName(line);
+  const hint = didYouMean(name, extra);
+  if (hint) return `/${name} isn't a command — not sent to the model. Did you mean /${hint}?`;
+  return `/${name} isn't a command — not sent to the model. Type /help.`;
+}
+
 export function didYouMean(name: string, extra: string[] = []): string | null {
   const n = name.toLowerCase();
   if (!n) return null;

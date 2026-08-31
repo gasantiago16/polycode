@@ -27,7 +27,10 @@ export function Help({
         <Text bold>Commands</Text>
         <Text color={theme.dim}>  esc close · tab complete · ↑↓ history</Text>
       </Text>
-      <Text color={theme.dim}>Ask a question about this repo. Writes wait for y/a/n in ask mode.</Text>
+      <Text color={theme.dim}>
+        Ask about this repo. In ask mode y = once, a = allow that tool for the session. Typos like /hepl are not
+        sent.
+      </Text>
       <Text> </Text>
       {SLASH_GROUPS.map((g) => {
         const names = SLASH_COMMANDS.filter((c) => c.group === g.id).map((c) => `/${c.name}`);
