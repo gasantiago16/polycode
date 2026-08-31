@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
+import { polycodeConfigDir } from "./paths.js";
 
 export interface Persona {
   name: string;
@@ -27,8 +27,29 @@ function parsePersonaFile(name: string, text: string, source: Persona["source"])
   return { name: id, description, instructions, source };
 }
 
+function jailedPersonaPath(dir: string, name: string): string | null {
+  if (name.includes("..") || name.includes("/") || name.includes("\\")) return null;
+  if (!/^[A-Za-z0-9._-]+\.(md|txt)$/i.test(name)) return null;
+  const file = join(dir, name);
+  try {
+    const st = lstatSync(file);
+    if (!st.isFile() || st.isSymbolicLink()) return null;
+    const root = realpathSync(dir).replace(/\\/g, "/").toLowerCase();
+    const resolved = realpathSync(file).replace(/\\/g, "/").toLowerCase();
+    if (resolved !== root && !resolved.startsWith(root.endsWith("/") ? root : `${root}/`)) return null;
+    return file;
+  } catch {
+    return null;
+  }
+}
+
 function readDir(dir: string, source: Persona["source"]): Persona[] {
   if (!existsSync(dir)) return [];
+  try {
+    if (lstatSync(dir).isSymbolicLink()) return [];
+  } catch {
+    return [];
+  }
   let names: string[] = [];
   try {
     names = readdirSync(dir);
@@ -38,11 +59,10 @@ function readDir(dir: string, source: Persona["source"]): Persona[] {
   const out: Persona[] = [];
   for (const n of names) {
     if (!/\.(md|txt)$/i.test(n)) continue;
-    if (n.includes("..") || n.includes("/") || n.includes("\\") || !/^[A-Za-z0-9._-]+\.(md|txt)$/i.test(n)) {
-      continue;
-    }
+    const file = jailedPersonaPath(dir, n);
+    if (!file) continue;
     try {
-      const raw = readFileSync(join(dir, n), "utf8");
+      const raw = readFileSync(file, "utf8");
       const p = parsePersonaFile(n, raw.length > 16_384 ? raw.slice(0, 16_384) : raw, source);
       if (p) out.push(p);
     } catch {
@@ -52,10 +72,10 @@ function readDir(dir: string, source: Persona["source"]): Persona[] {
   return out;
 }
 
-/** Project `.polycode/personas/` overrides `~/.config/polycode/personas/`. */
+/** Project `.polycode/personas/` overrides user-config `personas/`. */
 export function loadPersonas(cwd: string): Persona[] {
   const byName = new Map<string, Persona>();
-  const user = join(process.env.POLYCODE_CONFIG_DIR ?? join(homedir(), ".config", "polycode"), "personas");
+  const user = join(polycodeConfigDir(), "personas");
   for (const p of readDir(user, "user")) byName.set(p.name, p);
   for (const p of readDir(join(cwd, ".polycode", "personas"), "project")) byName.set(p.name, p);
   return [...byName.values()];

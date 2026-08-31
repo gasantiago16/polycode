@@ -320,6 +320,263 @@ describe("Agent.spawnChild", () => {
     expect(waited.output).toContain("survived");
     expect(parent.listChildren()[0].status).toBe("completed");
   });
+
+  it("caps parallel background explores at 8", async () => {
+    let release!: () => void;
+    const hold = new Promise<void>((r) => {
+      release = r;
+    });
+    const provider: Provider = {
+      id: "test",
+      model: "slow",
+      capabilities: () => capabilities,
+      async *stream() {
+        await hold;
+        yield { type: "text_delta", text: "x" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("yolo", async () => "once"), { sandbox });
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        parent.spawnChild({
+          description: `e${i}`,
+          prompt: "go",
+          subagent_type: "explore",
+          background: true,
+        }),
+      ),
+    );
+    expect(results.filter((r) => !r.isError)).toHaveLength(8);
+    expect(results.filter((r) => r.isError).every((r) => /too many running children/.test(r.output))).toBe(true);
+    expect(parent.listChildren().filter((c) => c.status === "running")).toHaveLength(8);
+    release();
+  });
+
+  it("refuses background researchers in ask mode", async () => {
+    const provider = new ScriptedProvider([[{ type: "stop", reason: "end_turn" }]]);
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    const r = await parent.spawnChild({
+      description: "cite",
+      prompt: "x",
+      subagent_type: "researcher",
+      background: true,
+    });
+    expect(r.isError).toBe(true);
+    expect(r.output).toMatch(/acceptEdits or yolo/);
+  });
+
+  it("Ctrl+B kills writers in ask instead of reporting them backgrounded", async () => {
+    const provider: Provider = {
+      id: "test",
+      model: "slow",
+      capabilities: () => capabilities,
+      async *stream() {
+        await new Promise((r) => setTimeout(r, 80));
+        yield { type: "text_delta", text: "should-not-survive" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    const ac = new AbortController();
+    const pending = parent.spawnChild(
+      { description: "edit", prompt: "go", subagent_type: "general" },
+      ac.signal,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    const ids = parent.detachRunningChildren();
+    ac.abort();
+    const r = await pending;
+    expect(ids).toEqual([]);
+    expect(r.output).not.toMatch(/backgrounded/);
+    expect(parent.listChildren()[0].status).toBe("killed");
+  });
+
+  it("ignores isolation=worktree on resume of a non-worktree child", async () => {
+    const provider = new ScriptedProvider([
+      [{ type: "text_delta", text: "first" }, { type: "stop", reason: "end_turn" }],
+      [{ type: "text_delta", text: "second" }, { type: "stop", reason: "end_turn" }],
+    ]);
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), {
+      sandbox,
+      openWorktree: async () => ({ sandbox, path: "/tmp/wt-should-not-open" }),
+    });
+    await parent.spawnChild({ description: "e", prompt: "one", subagent_type: "explore" });
+    const id = parent.listChildren()[0].id;
+    await parent.spawnChild({
+      description: "e2",
+      prompt: "two",
+      resume_from: id,
+      isolation: "worktree",
+    });
+    const child = parent.listChildren()[1];
+    expect(child.isolation).toBe("none");
+    expect(child.worktreePath).toBeUndefined();
+    expect(parent.sessionWorktrees()).toEqual([]);
+  });
+
+  it("redacts secrets on the child failure path", async () => {
+    const provider: Provider = {
+      id: "test",
+      model: "boom",
+      capabilities: () => capabilities,
+      async *stream() {
+        throw new Error("upstream Bearer sk-abcdefghijklmnopqrstuvwxyz123456");
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    const r = await parent.spawnChild({ description: "e", prompt: "go", subagent_type: "explore" });
+    expect(r.isError).toBe(true);
+    expect(r.output).not.toContain("sk-abcdefghijklmnopqrstuvwxyz123456");
+    expect(r.output).toContain("[REDACTED]");
+  });
+
+  it("waitChild timeout 0 is a snapshot even when a parent signal is live", async () => {
+    let release!: () => void;
+    const hold = new Promise<void>((r) => {
+      release = r;
+    });
+    const provider: Provider = {
+      id: "test",
+      model: "slow",
+      capabilities: () => capabilities,
+      async *stream() {
+        await hold;
+        yield { type: "text_delta", text: "late" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    await parent.spawnChild({
+      description: "look",
+      prompt: "go",
+      subagent_type: "explore",
+      background: true,
+    });
+    const ac = new AbortController();
+    const r = await parent.waitChild("c1", 0, ac.signal);
+    expect(r.output).toMatch(/still running/);
+    expect(parent.listChildren()[0].status).toBe("running");
+    release();
+  });
+
+  it("Ctrl+B during worktree open does not re-bind the aborted parent signal", async () => {
+    let release!: () => void;
+    const hold = new Promise<{ sandbox: Sandbox; path: string }>((r) => {
+      release = () => r({ sandbox, path: "/tmp/wt-detach" });
+    });
+    const provider: Provider = {
+      id: "test",
+      model: "slow",
+      capabilities: () => capabilities,
+      async *stream() {
+        yield { type: "text_delta", text: "survived-wt" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), {
+      sandbox,
+      openWorktree: () => hold,
+    });
+    const ac = new AbortController();
+    const pending = parent.spawnChild(
+      { description: "e", prompt: "go", subagent_type: "explore", isolation: "worktree" },
+      ac.signal,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    const ids = parent.detachRunningChildren();
+    ac.abort();
+    release();
+    const r = await pending;
+    expect(ids).toEqual(["c1"]);
+    expect(r.output).toMatch(/survived-wt|backgrounded/);
+    expect(parent.listChildren()[0].status).not.toBe("killed");
+  });
+
+  it("waitChild honors abort and returns live peek while still running", async () => {
+    const provider: Provider = {
+      id: "test",
+      model: "slow",
+      capabilities: () => capabilities,
+      async *stream() {
+        await new Promise((r) => setTimeout(r, 200));
+        yield { type: "text_delta", text: "late" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [read], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    await parent.spawnChild({
+      description: "look",
+      prompt: "go",
+      subagent_type: "explore",
+      background: true,
+    });
+    const ac = new AbortController();
+    const pending = parent.waitChild("c1", 60_000, ac.signal);
+    ac.abort();
+    const r = await pending;
+    expect(r.output).toMatch(/still running/);
+    expect(parent.listChildren()[0].status).toBe("running");
+  });
+
+  it("clears demoteTurn after abort during stream so the next tool turn runs", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let calls = 0;
+    const ran = vi.fn(async () => ({ output: "ok" }));
+    const readTool: ToolSpec = { ...read, run: ran };
+    const provider: Provider = {
+      id: "test",
+      model: "x",
+      capabilities: () => capabilities,
+      async *stream(req) {
+        calls++;
+        if (calls === 1) {
+          await gate;
+          if (req.signal?.aborted) throw new Error("aborted");
+          yield { type: "text_delta", text: "one" };
+          yield { type: "stop", reason: "end_turn" };
+          return;
+        }
+        if (calls === 2) {
+          yield {
+            type: "tool_call",
+            call: { type: "tool_call", id: "1", name: "read", input: { path: "a.ts" } },
+          };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        yield { type: "text_delta", text: "two" };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const parent = new Agent(provider, [readTool], new PermissionEngine("ask", async () => "deny"), { sandbox });
+    parent.pushUser("one");
+    const ac = new AbortController();
+    const first = parent.run(ac.signal);
+    const waiter = (async () => {
+      try {
+        for await (const _ of first) {
+          /* drain */
+        }
+      } catch {
+        /* abort */
+      }
+    })();
+    await new Promise((r) => setTimeout(r, 5));
+    parent.detachRunningChildren();
+    ac.abort();
+    release();
+    await waiter;
+
+    parent.pushUser("two");
+    const events = [];
+    for await (const ev of parent.run()) events.push(ev);
+    expect(ran).toHaveBeenCalled();
+    expect(events.some((e) => e.type === "text_delta" && e.text === "two")).toBe(true);
+  });
 });
 
 describe("parseReviewVerdict", () => {

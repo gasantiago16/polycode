@@ -6,6 +6,18 @@ export function isSecretEnvName(name: string): boolean {
   return /(_SECRET|_TOKEN|_PASSWORD|_PASSWD|_PRIVATE_KEY|_CREDENTIALS?|_AUTHORIZATION|_KEY)$/.test(n);
 }
 
+/** Loader/process-injection names that must not reach spawned node/npm. */
+export function isUnsafeChildEnvName(name: string): boolean {
+  const n = name.toUpperCase();
+  return (
+    n === "NODE_OPTIONS" ||
+    n === "NODE_PATH" ||
+    n === "NODE_EXTRA_CA_CERTS" ||
+    n.startsWith("LD_") ||
+    n.startsWith("DYLD_")
+  );
+}
+
 /**
  * Copy `process.env` minus secret-looking names.
  * `overrides` are applied last (explicit MCP env) except the hosted auth tokens,
@@ -14,7 +26,7 @@ export function isSecretEnvName(name: string): boolean {
 export function childProcessEnv(overrides?: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(process.env)) {
-    if (v == null || isSecretEnvName(k)) continue;
+    if (v == null || isSecretEnvName(k) || isUnsafeChildEnvName(k)) continue;
     out[k] = v;
   }
   if (overrides) {
@@ -22,6 +34,7 @@ export function childProcessEnv(overrides?: Record<string, string | undefined>):
       if (v == null) continue;
       const n = k.toUpperCase();
       if (n === "POLYCODE_AUTH_TOKEN" || n === "POLYCODE_AUTH_TOKENS") continue;
+      if (isUnsafeChildEnvName(k)) continue;
       out[k] = v;
     }
   }

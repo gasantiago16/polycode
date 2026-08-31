@@ -14,7 +14,7 @@ import type {
   TodoItem,
   ChildRun,
 } from "./types.js";
-import { PermissionEngine } from "./permissions.js";
+import { PermissionEngine, type PermissionMode } from "./permissions.js";
 import {
   compactMessages,
   contextBreakdown,
@@ -74,10 +74,13 @@ export interface AgentOptions {
 }
 
 const MAX_RUNNING_CHILDREN = 8;
+const MAX_WAIT_CHILD_MS = 10 * 60 * 1000;
+const MAX_RESUME_MESSAGES = 24;
+const MAX_FINISHED_CHILDREN = 32;
 
 interface ChildHandle {
   snap: ChildRun;
-  agent: Agent;
+  agent?: Agent;
   abort: AbortController;
   done: Promise<void>;
   sandbox: Sandbox;
@@ -111,6 +114,8 @@ export class Agent {
   private children = new Map<string, ChildHandle>();
   private childSeq = 0;
   private demoteTurn = false;
+  /** Parallel `task` batches spawn on forkSilent so they cannot share the TUI prompt. */
+  private silentChildSpawns = false;
 
   constructor(
     private provider: Provider,
@@ -166,8 +171,14 @@ export class Agent {
   peekChild(id: string): ChildRun | null {
     const h = this.children.get(id);
     if (!h) return null;
+    if (!h.agent) return { ...h.snap };
     const live = redactSecrets(clipChildOutput(finalAssistantText(h.agent) || h.snap.output || "")).text;
     return { ...h.snap, output: live };
+  }
+
+  replacePermissions(engine: PermissionEngine): void {
+    this.permissions.invalidatePrompts();
+    this.permissions = engine;
   }
 
   /**
@@ -186,8 +197,16 @@ export class Agent {
       const readOnly = h.snap.subagentType === "explore" || h.snap.subagentType === "researcher";
       if (!readOnly && !silentWrite) {
         h.abort.abort();
+        if (h.snap.status === "running") {
+          h.snap.status = "killed";
+          h.snap.error = true;
+          h.snap.output = "child interrupted";
+          h.snap.endedAt = Date.now();
+        }
+        this.hookChildSettled(h);
         continue;
       }
+      h.agent?.replacePermissions(this.permissions.forkSilent());
       this.hookChildSettled(h);
       ids.push(h.snap.id);
     }
@@ -336,10 +355,6 @@ export class Agent {
       return { output: `unknown persona "${input.persona}" (loaded: ${names})`, isError: true };
     }
 
-    const running = [...this.children.values()].filter((h) => h.snap.status === "running").length;
-    if (running >= MAX_RUNNING_CHILDREN) {
-      return { output: `too many running children (${running}/${MAX_RUNNING_CHILDREN})`, isError: true };
-    }
     const parentMode = this.permissions.getMode();
     if (
       input.background &&
@@ -352,74 +367,119 @@ export class Agent {
         isError: true,
       };
     }
-
-    let childSandbox = resume?.sandbox ?? this.opts.sandbox;
-    let worktreePath = resume?.snap.worktreePath;
-    let worktreeNote = "";
-    const isolation = input.isolation === "worktree" || resume?.snap.isolation === "worktree" ? "worktree" : "none";
-    if (isolation === "worktree" && !resume) {
-      if (!this.opts.openWorktree) {
-        return { output: "worktree isolation is not configured in this session", isError: true };
-      }
-      try {
-        const wt = await this.opts.openWorktree();
-        childSandbox = wt.sandbox;
-        worktreePath = wt.path;
-        this.createdWorktrees.push(wt.path);
-        worktreeNote = `\n\n[worktree ${wt.path} — not merged. /worktree apply <id> to copy onto the parent tree]`;
-      } catch (e) {
-        return { output: `worktree failed: ${String(e)}`, isError: true };
-      }
-    } else if (worktreePath) {
-      worktreeNote = `\n\n[worktree ${worktreePath} — not merged. /worktree apply <id> to copy onto the parent tree]`;
+    if (
+      input.background &&
+      type === "researcher" &&
+      parentMode !== "yolo" &&
+      parentMode !== "acceptEdits"
+    ) {
+      return {
+        output: "background researcher requires /mode acceptEdits or yolo (web_* cannot prompt)",
+        isError: true,
+      };
     }
+
+    const running = [...this.children.values()].filter((h) => h.snap.status === "running").length;
+    if (running >= MAX_RUNNING_CHILDREN) {
+      return { output: `too many running children (${running}/${MAX_RUNNING_CHILDREN})`, isError: true };
+    }
+
+    // Isolation is a property of the source child. Ignore input.isolation on resume.
+    const isolation: "none" | "worktree" = resume
+      ? resume.snap.isolation === "worktree"
+        ? "worktree"
+        : "none"
+      : input.isolation === "worktree"
+        ? "worktree"
+        : "none";
 
     const id = this.newChildId();
-    await this.fireHooks("SubagentStart", { prompt: input.prompt, subagentType: type });
-    const childPerms = input.background ? this.permissions.forkSilent() : this.permissions;
-    const child = new Agent(this.provider, toolsForChild(type, this.tools), childPerms, {
-      sandbox: childSandbox,
-      system: systemForChild(type, this.opts.system, persona?.instructions),
-      compact: this.opts.compact,
-      maxSteps: 30,
-      isChild: true,
-      hooks: this.opts.hooks,
-      initialMessages: resume ? structuredClone([...resume.agent.history()]) : undefined,
-    });
-    child.pushUser(input.prompt);
-
     const abort = new AbortController();
-    let unlinkParent: (() => void) | undefined;
-    if (signal && !input.background) {
-      const onAbort = () => abort.abort();
-      if (signal.aborted) abort.abort();
-      else {
-        signal.addEventListener("abort", onAbort);
-        unlinkParent = () => signal.removeEventListener("abort", onAbort);
-      }
-    }
-
+    const gate = deferredVoid();
     const snap: ChildRun = {
       id,
       description: input.description,
       subagentType: type,
       isolation,
       persona: persona?.name,
-      worktreePath,
+      worktreePath: resume?.snap.worktreePath,
       status: "running",
       output: "",
       startedAt: Date.now(),
     };
     const handle: ChildHandle = {
       snap,
-      agent: child,
       abort,
-      sandbox: childSandbox,
-      done: Promise.resolve(),
-      unlinkParent,
+      sandbox: resume?.sandbox ?? this.opts.sandbox,
+      done: gate.promise,
     };
-    handle.done = this.driveChild(handle, worktreeNote);
+    if (signal && !input.background) {
+      const onAbort = () => abort.abort();
+      if (signal.aborted) abort.abort();
+      else {
+        signal.addEventListener("abort", onAbort);
+        handle.unlinkParent = () => signal.removeEventListener("abort", onAbort);
+      }
+    }
+    // Reserve the slot before any await so parallel spawnChild calls share one cap.
     this.children.set(id, handle);
+    let committed = false;
+    try {
+      let childSandbox = handle.sandbox;
+      let worktreePath = snap.worktreePath;
+      let worktreeNote = "";
+      if (isolation === "worktree" && !resume) {
+        if (!this.opts.openWorktree) {
+          return { output: "worktree isolation is not configured in this session", isError: true };
+        }
+        try {
+          const wt = await this.opts.openWorktree();
+          childSandbox = wt.sandbox;
+          worktreePath = wt.path;
+          snap.worktreePath = wt.path;
+          this.createdWorktrees.push(wt.path);
+          worktreeNote = `\n\n[worktree ${wt.path} — not merged. /worktree apply <id> to copy onto the parent tree]`;
+        } catch (e) {
+          return { output: `worktree failed: ${String(e)}`, isError: true };
+        }
+      } else if (worktreePath) {
+        worktreeNote = `\n\n[worktree ${worktreePath} — not merged. /worktree apply <id> to copy onto the parent tree]`;
+      }
+
+      await this.fireHooks("SubagentStart", { prompt: input.prompt, subagentType: type });
+      if (handle.snap.status !== "running") {
+        committed = true;
+        gate.resolve();
+        return { output: handle.snap.output || `child ${id} ${handle.snap.status}`, isError: true };
+      }
+      const detachedFromParent = !!(signal && !input.background && !handle.unlinkParent);
+      const silent = input.background || this.silentChildSpawns || detachedFromParent;
+      const childPerms = silent ? this.permissions.forkSilent() : this.permissions.forkInteractive();
+      const child = new Agent(this.provider, toolsForChild(type, this.tools), childPerms, {
+        sandbox: childSandbox,
+        system: systemForChild(type, this.opts.system, persona?.instructions),
+        compact: this.opts.compact,
+        maxSteps: 30,
+        isChild: true,
+        hooks: this.opts.hooks,
+        initialMessages: resume?.agent ? cloneResumeHistory(resume.agent.history()) : undefined,
+      });
+      child.pushUser(input.prompt);
+
+      handle.agent = child;
+      handle.sandbox = childSandbox;
+      const drive = this.driveChild(handle, worktreeNote);
+      void drive.then(gate.resolve, (err) => {
+        gate.resolve();
+        void err;
+      });
+      committed = true;
+    } finally {
+      if (!committed) {
+        gate.resolve();
+        this.children.delete(id);
+      }
+    }
 
     if (input.background) {
       this.hookChildSettled(handle);
@@ -429,11 +489,12 @@ export class Agent {
           `Use task_wait with id=${id} to collect, or /dashboard.`,
       };
     }
-    if (signal) await Promise.race([handle.done, whenAborted(signal)]);
+    if (signal) await abortableRace(handle.done, signal);
     else await handle.done;
     if (handle.snap.status === "running") {
       handle.unlinkParent?.();
       handle.unlinkParent = undefined;
+      handle.agent?.replacePermissions(this.permissions.forkSilent());
       this.hookChildSettled(handle);
       return {
         output:
@@ -444,7 +505,7 @@ export class Agent {
     return { output: handle.snap.output, isError: handle.snap.error };
   }
 
-  async waitChild(id?: string, timeoutMs = 0): Promise<ToolRunResult> {
+  async waitChild(id?: string, timeoutMs = 0, signal?: AbortSignal): Promise<ToolRunResult> {
     if (!id) {
       const rows = this.listChildren();
       if (!rows.length) return { output: "no child agents in this session" };
@@ -452,11 +513,19 @@ export class Agent {
     }
     const h = this.children.get(id);
     if (!h) return { output: `unknown child "${id}"`, isError: true };
-    if (h.snap.status === "running" && timeoutMs > 0) {
-      await Promise.race([h.done, delay(timeoutMs)]);
+    if (h.snap.status === "running") {
+      const waitMs = clampWaitMs(timeoutMs);
+      if (waitMs > 0) {
+        await waitUntil(h.done, waitMs, signal);
+      }
+      if (h.snap.status === "running") {
+        const live = this.peekChild(id) ?? h.snap;
+        return { output: `${formatChildReport(live)}\n(still running)` };
+      }
     }
+    const live = this.peekChild(id) ?? h.snap;
     return {
-      output: formatChildReport(h.snap),
+      output: formatChildReport(live),
       isError: !!h.snap.error,
     };
   }
@@ -476,19 +545,33 @@ export class Agent {
 
   private async driveChild(handle: ChildHandle, worktreeNote: string): Promise<void> {
     try {
-      for await (const _ev of handle.agent.run(handle.abort.signal)) {
-        /* parent does not ingest child stream */
+      if (!handle.agent) throw new Error("child agent missing");
+      let failMsg = "";
+      for await (const ev of handle.agent.run(handle.abort.signal)) {
+        if (ev.type === "error") failMsg = ev.error;
       }
-      handle.snap.status = handle.abort.signal.aborted ? "killed" : "completed";
-      const raw = clipChildOutput(finalAssistantText(handle.agent) || "(child produced no text)");
-      handle.snap.output = redactSecrets(raw).text + worktreeNote;
-      handle.snap.error = handle.snap.status !== "completed";
+      if (handle.snap.status === "running") {
+        if (failMsg) {
+          handle.snap.status = "failed";
+          handle.snap.error = true;
+          handle.snap.output = redactSecrets(`child failed: ${failMsg}`).text;
+        } else {
+          handle.snap.status = handle.abort.signal.aborted ? "killed" : "completed";
+          const raw = clipChildOutput(finalAssistantText(handle.agent) || "(child produced no text)");
+          handle.snap.output = redactSecrets(raw).text + worktreeNote;
+          handle.snap.error = handle.snap.status !== "completed";
+        }
+      }
     } catch (e) {
-      handle.snap.status = handle.abort.signal.aborted ? "killed" : "failed";
-      handle.snap.error = true;
-      handle.snap.output = handle.abort.signal.aborted ? "child interrupted" : `child failed: ${String(e)}`;
+      if (handle.snap.status === "running") {
+        handle.snap.status = handle.abort.signal.aborted ? "killed" : "failed";
+        handle.snap.error = true;
+        handle.snap.output = redactSecrets(
+          handle.abort.signal.aborted ? "child interrupted" : `child failed: ${String(e)}`,
+        ).text;
+      }
     } finally {
-      handle.snap.endedAt = Date.now();
+      if (!handle.snap.endedAt) handle.snap.endedAt = Date.now();
       await this.fireHooks("SubagentStop", {
         prompt: handle.snap.description,
         subagentType: handle.snap.subagentType,
@@ -499,9 +582,9 @@ export class Agent {
 
   private gcChildren(): void {
     const done = [...this.children.values()].filter((h) => h.snap.status !== "running");
-    if (done.length <= 32) return;
+    if (done.length <= MAX_FINISHED_CHILDREN) return;
     done.sort((a, b) => (a.snap.endedAt ?? 0) - (b.snap.endedAt ?? 0));
-    for (const h of done.slice(0, done.length - 32)) this.children.delete(h.snap.id);
+    for (const h of done.slice(0, done.length - MAX_FINISHED_CHILDREN)) this.children.delete(h.snap.id);
   }
 
   /**
@@ -567,6 +650,7 @@ export class Agent {
       let textBuf = "";
       let stop: StopReason = "end_turn";
       let usage: { inputTokens: number; outputTokens: number } | undefined;
+      let sawStop = false;
       let fatal = false;
 
       // One model turn. Retry transient provider errors (rate limits, dropped
@@ -599,12 +683,11 @@ export class Agent {
                 pending.push(ev.call);
                 assistantContent.push(ev.call);
                 produced = true;
-                yield ev;
                 break;
               case "stop":
                 stop = ev.reason;
                 usage = ev.usage;
-                yield ev;
+                sawStop = true;
                 break;
               case "error":
                 errored = ev.error;
@@ -623,6 +706,9 @@ export class Agent {
           textBuf = "";
           assistantContent.length = 0;
           pending.length = 0;
+          sawStop = false;
+          usage = undefined;
+          stop = "end_turn";
           continue; // re-stream the same turn
         }
 
@@ -634,6 +720,11 @@ export class Agent {
       if (fatal) return;
 
       if (textBuf) assistantContent.unshift({ type: "text", text: textBuf });
+      stampParallelTaskWorktrees(pending);
+      for (const call of pending) {
+        yield { type: "tool_call", call };
+      }
+      if (sawStop) yield { type: "stop", reason: stop, usage };
       this.messages.push({ role: "assistant", content: assistantContent });
 
       // Settled turn → emit usage exactly once. The retry loop above has already
@@ -675,7 +766,7 @@ export class Agent {
       };
       if (!this.opts.isChild) {
         ctx.spawnChild = (input) => this.spawnChild(input, signal);
-        ctx.waitChild = (id, ms) => this.waitChild(id, ms);
+        ctx.waitChild = (id, ms) => this.waitChild(id, ms, signal);
         ctx.killChild = (id) => this.killChild(id);
         ctx.listChildren = () => this.listChildren();
       }
@@ -745,21 +836,21 @@ export class Agent {
         return runTool(call, g.tool);
       };
 
-      stampParallelTaskWorktrees(pending);
       let idx = 0;
       let backgrounded = false;
+      const mode = this.permissions.getMode();
       while (idx < pending.length) {
         if (signal?.aborted && this.demoteTurn) {
           backgrounded = true;
           break;
         }
         // Consecutive read-only tools AND fan-out `task` children run together.
-        // Permission prompts stay sequential; only execution is parallel.
+        // Only children that will not prompt may share a batch.
         const batch: ToolCallPart[] = [];
         while (idx < pending.length) {
           const call = pending[idx];
           const t = toolMap.get(call.name);
-          if (canRunParallel(t, call)) batch.push(pending[idx++]);
+          if (canRunParallel(t, call, mode)) batch.push(pending[idx++]);
           else break;
         }
 
@@ -772,10 +863,16 @@ export class Agent {
               results.push(g.result);
             } else allowed.push({ call, tool: g.tool });
           }
-          const outcomes = await Promise.all(allowed.map(({ call, tool }) => runTool(call, tool)));
-          for (const o of outcomes) {
-            for (const ev of o.events) yield ev;
-            results.push(o.result);
+          const hadTask = allowed.some((a) => a.call.name === "task");
+          if (hadTask) this.silentChildSpawns = true;
+          try {
+            const outcomes = await Promise.all(allowed.map(({ call, tool }) => runTool(call, tool)));
+            for (const o of outcomes) {
+              for (const ev of o.events) yield ev;
+              results.push(o.result);
+            }
+          } finally {
+            this.silentChildSpawns = false;
           }
         } else {
           const call = batch.length === 1 ? batch[0] : pending[idx++];
@@ -801,12 +898,15 @@ export class Agent {
       // loop: feed tool results back to the model on the next turn
     }
     } finally {
+      this.demoteTurn = false;
+      this.silentChildSpawns = false;
       if (!this.opts.isChild) await this.fireHooks("Stop", {});
     }
   }
 }
 
-function finalAssistantText(agent: Agent): string {
+function finalAssistantText(agent: Agent | undefined): string {
+  if (!agent) return "";
   const last = [...agent.history()].reverse().find((m) => m.role === "assistant");
   if (!last) return "";
   return last.content
@@ -832,10 +932,17 @@ function formatChildReport(run: ChildRun): string {
   return `${formatChildLine(run)}\n${run.output || "(no output yet)"}`;
 }
 
-function canRunParallel(tool: ToolSpec | undefined, call: ToolCallPart): boolean {
+function canRunParallel(tool: ToolSpec | undefined, call: ToolCallPart, mode: PermissionMode): boolean {
   if (!tool) return false;
   if (tool.parallelSafe && tool.permission === "safe") return true;
-  if (tool.name === "task" && (isReadOnlyTask(call.input) || taskWantsWorktree(call.input))) return true;
+  if (tool.name !== "task") return false;
+  const silentOk = mode === "yolo" || mode === "acceptEdits";
+  if (isReadOnlyTask(call.input)) {
+    const type = String((call.input as { subagent_type?: string }).subagent_type ?? "general").toLowerCase();
+    if (type === "researcher") return silentOk;
+    return true;
+  }
+  if (taskWantsWorktree(call.input)) return silentOk;
   return false;
 }
 
@@ -869,13 +976,54 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function whenAborted(signal?: AbortSignal): Promise<void> {
+function clampWaitMs(ms: number): number {
+  if (!Number.isFinite(ms) || ms <= 0) return 0;
+  return Math.min(Math.max(Math.floor(ms), 1), MAX_WAIT_CHILD_MS);
+}
+
+function cloneResumeHistory(messages: readonly CanonicalMessage[]): CanonicalMessage[] {
+  let slice = messages.length > MAX_RESUME_MESSAGES ? messages.slice(-MAX_RESUME_MESSAGES) : [...messages];
+  while (slice.length && slice[0].role === "tool") slice = slice.slice(1);
+  return structuredClone(slice);
+}
+
+function deferredVoid(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/** Race `done` against abort; always remove the abort listener. */
+function abortableRace(done: Promise<void>, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
   return new Promise((resolve) => {
-    if (!signal) return;
-    if (signal.aborted) {
+    const finish = () => {
+      signal.removeEventListener("abort", onAbort);
       resolve();
-      return;
-    }
-    signal.addEventListener("abort", () => resolve(), { once: true });
+    };
+    const onAbort = () => finish();
+    signal.addEventListener("abort", onAbort);
+    done.then(finish, finish);
+  });
+}
+
+function waitUntil(done: Promise<void>, timeoutMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    };
+    const onAbort = () => finish();
+    done.then(finish, finish);
+    if (timeoutMs > 0) timer = setTimeout(finish, timeoutMs);
+    if (signal) signal.addEventListener("abort", onAbort);
   });
 }

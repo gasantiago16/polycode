@@ -116,6 +116,8 @@ export function isProtectedInput(input: unknown): boolean {
 export class PermissionEngine {
   /** Tools the user chose to allow for the rest of the session ("always"). */
   private sessionAllowed = new Set<string>();
+  private silent = false;
+  private promptGen = 0;
 
   constructor(
     private mode: PermissionMode,
@@ -130,14 +132,34 @@ export class PermissionEngine {
     return this.mode;
   }
 
+  isSilent(): boolean {
+    return this.silent;
+  }
+
+  /** In-flight `prompt()` calls resolve as deny after this. */
+  invalidatePrompts(): void {
+    this.promptGen += 1;
+  }
+
   /**
-   * Silent engine for background children (cannot pop the TUI prompt).
-   * yolo/acceptEdits stay writable; ask/plan become plan (read-only).
+   * Silent engine for background / detached / parallel children (cannot pop the TUI).
+   * yolo stays yolo. acceptEdits stays acceptEdits but auto-allows dangerous
+   * (non-interactive). ask/plan become plan (read-only).
    */
   forkSilent(): PermissionEngine {
     const mode: PermissionMode =
       this.mode === "yolo" || this.mode === "acceptEdits" ? this.mode : "plan";
-    return new PermissionEngine(mode, async () => "deny", this.rules);
+    const child = new PermissionEngine(mode, async () => "deny", this.rules);
+    child.silent = true;
+    for (const t of this.sessionAllowed) child.sessionAllowed.add(t);
+    return child;
+  }
+
+  /** Isolated interactive engine that can still prompt (sequential foreground children). */
+  forkInteractive(): PermissionEngine {
+    const child = new PermissionEngine(this.mode, this.prompt, this.rules);
+    for (const t of this.sessionAllowed) child.sessionAllowed.add(t);
+    return child;
   }
 
   /** Tool names granted "always allow" this session (for UI display). */
@@ -173,8 +195,14 @@ export class PermissionEngine {
       return { allow: true };
     }
 
-    // ask mode (or a dangerous tool in any non-yolo mode): defer to the user.
+    // ask mode (or a dangerous tool in acceptEdits): defer to the user, unless silent.
+    if (this.silent) {
+      if (this.mode === "acceptEdits") return { allow: true };
+      return { allow: false, reason: "background child cannot prompt" };
+    }
+    const gen = this.promptGen;
     const choice = await this.prompt({ tool, input });
+    if (gen !== this.promptGen) return { allow: false, reason: "background child cannot prompt" };
     if (choice === "always") {
       this.sessionAllowed.add(tool.name);
       return { allow: true };
