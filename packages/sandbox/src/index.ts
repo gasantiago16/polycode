@@ -2,13 +2,30 @@ import { promises as fs } from "node:fs";
 import { exec, execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve, relative, dirname, join, sep } from "node:path";
-import type { Sandbox, ExecOptions, ExecResult } from "@polycode/core";
+import {
+  childProcessEnv,
+  commandTouchesProtected,
+  isPolycodeToolPathAllowed,
+  isProtectedProjectPath,
+  type Sandbox,
+  type ExecOptions,
+  type ExecResult,
+} from "@polycode/core";
 
 const pexec = promisify(exec);
 const pexecFile = promisify(execFile);
 
-const IGNORE = new Set(["node_modules", ".git", "dist", ".polycode"]);
+const IGNORE = new Set(["node_modules", ".git", "dist", ".polycode", ".ssh", ".env"]);
 const MAX_BUFFER = 10 * 1024 * 1024;
+
+function refuseProtectedCommand(command: string): ExecResult | null {
+  if (!commandTouchesProtected(command)) return null;
+  return {
+    stdout: "",
+    stderr: "command touches protected path (.env / .git / .ssh / .polycode)",
+    code: 1,
+  };
+}
 
 export type SandboxKind = "local" | "docker";
 
@@ -36,6 +53,9 @@ export class LocalSandbox implements Sandbox {
   get root(): string {
     return this.rootDir;
   }
+  get projectPath(): string {
+    return this.rootDir;
+  }
 
   private resolveLexical(rel: string): string {
     const abs = resolve(this.rootDir, rel);
@@ -43,9 +63,10 @@ export class LocalSandbox implements Sandbox {
     if (r === ".." || r.startsWith(".." + sep)) {
       throw new Error(`path escapes project root: ${rel}`);
     }
-    // polycode's own metadata (session transcripts etc.) is off-limits to tools,
-    // so the agent can't read prior-session content back into the model.
-    if (r === ".polycode" || r.startsWith(".polycode" + sep)) {
+    // polycode metadata is off-limits (session transcripts), except tool-visible
+    // paths (.polycode/reviews/, .polycode/memory.md).
+    const posix = r.split(sep).join("/");
+    if (isProtectedProjectPath(posix) && !isPolycodeToolPathAllowed(posix)) {
       throw new Error(`path is not accessible: ${rel}`);
     }
     return abs;
@@ -77,6 +98,10 @@ export class LocalSandbox implements Sandbox {
     return fs.readFile(await this.resolveSafe(rel), "utf8");
   }
 
+  async readFileBytes(rel: string): Promise<Uint8Array> {
+    return fs.readFile(await this.resolveSafe(rel));
+  }
+
   async writeFile(rel: string, content: string): Promise<void> {
     const abs = await this.resolveSafe(rel);
     await fs.mkdir(dirname(abs), { recursive: true });
@@ -84,9 +109,12 @@ export class LocalSandbox implements Sandbox {
   }
 
   async exec(command: string, opts?: ExecOptions): Promise<ExecResult> {
+    const blocked = refuseProtectedCommand(command);
+    if (blocked) return blocked;
     try {
       const { stdout, stderr } = await pexec(command, {
         cwd: this.rootDir,
+        env: childProcessEnv(),
         timeout: opts?.timeoutMs ?? 120_000,
         signal: opts?.signal,
         maxBuffer: MAX_BUFFER,
@@ -105,6 +133,7 @@ export class LocalSandbox implements Sandbox {
     try {
       const { stdout, stderr } = await pexecFile(file, args, {
         cwd: this.rootDir,
+        env: childProcessEnv(),
         timeout: opts?.timeoutMs ?? 120_000,
         signal: opts?.signal,
         maxBuffer: MAX_BUFFER,
@@ -178,10 +207,16 @@ export class DockerSandbox implements Sandbox {
   get root(): string {
     return `docker:${this.containerId.slice(0, 12)} (${this.rootDir})`;
   }
+  get projectPath(): string {
+    return this.rootDir;
+  }
 
   // File ops operate on the bind-mounted project (host-side, path-jailed).
   readFile(rel: string): Promise<string> {
     return this.files.readFile(rel);
+  }
+  readFileBytes(rel: string): Promise<Uint8Array> {
+    return this.files.readFileBytes(rel);
   }
   writeFile(rel: string, content: string): Promise<void> {
     return this.files.writeFile(rel, content);
@@ -191,6 +226,8 @@ export class DockerSandbox implements Sandbox {
   }
 
   async exec(command: string, opts?: ExecOptions): Promise<ExecResult> {
+    const blocked = refuseProtectedCommand(command);
+    if (blocked) return blocked;
     try {
       const { stdout, stderr } = await pexecFile(
         "docker",
@@ -248,6 +285,15 @@ export class DockerSandbox implements Sandbox {
   }
 }
 
+export {
+  addGitWorktree,
+  removeGitWorktree,
+  listGitWorktrees,
+  applyGitWorktree,
+  resolveGitWorktree,
+  worktreeRoot,
+} from "./worktree.js";
+
 async function ensureDocker(): Promise<void> {
   try {
     await pexecFile("docker", ["version", "--format", "{{.Server.Version}}"]);
@@ -264,7 +310,8 @@ async function* walkDir(dir: string, root: string): AsyncGenerator<string> {
     return;
   }
   for (const e of entries) {
-    if (IGNORE.has(e.name)) continue;
+    const name = e.name.toLowerCase();
+    if (IGNORE.has(name) || name.startsWith(".env.")) continue;
     const full = join(dir, e.name);
     if (e.isDirectory()) yield* walkDir(full, root);
     else yield relative(root, full).split(sep).join("/");

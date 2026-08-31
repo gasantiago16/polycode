@@ -42,86 +42,139 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Providers &amp; Models</h1>
-<p>Supported providers: <strong>OpenAI</strong>, <strong>Google Gemini</strong>, <strong>xAI (Grok)</strong>. (Anthropic is
-intentionally out of scope for this project.)</p>
-<p>All three are reached through one adapter over the Vercel AI SDK
-(<code>@ai-sdk/openai</code>, <code>@ai-sdk/google</code>, <code>@ai-sdk/xai</code>), behind the canonical <code>Provider</code>
-interface in <code>@polycode/core</code>.</p>
-<h2>Current model IDs (confirmed June 2026)</h2>
-<blockquote>
-<p>Model IDs churn. These were verified against provider docs in June 2026 — re-check before
-relying on them long-term.</p>
-</blockquote>
+<p>polycode is <strong>table-driven</strong>. The agent loop never sees a vendor SDK. Add a row to
+the catalog (<code>packages/providers/src/catalog.ts</code>); do not grow <code>makeProvider</code> with
+one-off switch cases.</p>
+<p>Pinned <strong>2026-08-31</strong>. IDs churn — <code>poly --models</code> prints the checked-in catalog.</p>
+<h2>Built-in providers</h2>
 <table>
 <thead>
 <tr>
-<th>Provider</th>
-<th>Good defaults</th>
-<th>Cheaper / other</th>
-<th>Newer</th>
+<th>id</th>
+<th>Kind</th>
+<th>Default strong</th>
+<th>Key</th>
+<th>Base URL</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>OpenAI</td>
-<td><code>gpt-5.5</code> (flagship)</td>
-<td><code>gpt-5.4-mini</code>, <code>gpt-5.4-nano</code></td>
-<td>—</td>
+<td><code>openai</code></td>
+<td>native OpenAI SDK</td>
+<td><code>gpt-5.5</code></td>
+<td><code>OPENAI_API_KEY</code></td>
+<td>SDK default</td>
 </tr>
 <tr>
-<td>Google</td>
-<td><code>gemini-2.5-flash</code>, <code>gemini-2.5-pro</code></td>
-<td><code>gemini-2.5-flash-lite</code></td>
-<td><code>gemini-3.5-flash</code>, <code>gemini-3.1-pro</code></td>
+<td><code>google</code></td>
+<td>native Google SDK</td>
+<td><code>gemini-3.1-pro</code></td>
+<td><code>GOOGLE_GENERATIVE_AI_API_KEY</code> (alias <code>GEMINI_API_KEY</code>)</td>
+<td>SDK default</td>
 </tr>
 <tr>
-<td>xAI</td>
+<td><code>xai</code></td>
+<td>native xAI SDK</td>
 <td><code>grok-4.3</code></td>
-<td><code>grok-code-fast-1</code></td>
-<td>—</td>
+<td><code>XAI_API_KEY</code></td>
+<td>SDK default</td>
+</tr>
+<tr>
+<td><code>muse</code></td>
+<td>OpenAI-compat</td>
+<td><code>muse-spark-1.2</code></td>
+<td><code>MUSE_API_KEY</code> (alias <code>MODEL_API_KEY</code>)</td>
+<td><code>https://api.meta.ai/v1</code> (<code>MUSE_BASE_URL</code>)</td>
+</tr>
+<tr>
+<td><code>nvidia</code></td>
+<td>OpenAI-compat</td>
+<td><code>nvidia/nemotron-3-super-120b-a12b</code></td>
+<td><code>NVIDIA_API_KEY</code></td>
+<td><code>https://integrate.api.nvidia.com/v1</code> (<code>NVIDIA_BASE_URL</code>)</td>
+</tr>
+<tr>
+<td><code>qwen</code></td>
+<td>OpenAI-compat</td>
+<td><code>qwen3.8-max</code></td>
+<td><code>DASHSCOPE_API_KEY</code> (alias <code>QWEN_API_KEY</code>)</td>
+<td>DashScope intl (<code>QWEN_BASE_URL</code>)</td>
+</tr>
+<tr>
+<td><code>anthropic</code></td>
+<td>native Anthropic SDK</td>
+<td><code>claude-sonnet-4-5</code></td>
+<td><code>ANTHROPIC_API_KEY</code></td>
+<td>SDK default</td>
 </tr>
 </tbody></table>
-<p>Notes:</p>
-<ul>
-<li>OpenAI&#39;s <code>gpt-5</code> is superseded by the 5.4/5.5 line.</li>
-<li>xAI&#39;s <code>grok-4</code> is retired (requests redirect to <code>grok-4.3</code>).</li>
-<li>Gemini <code>gemini-2.5-flash</code> is a safe, cheap smoke-test target.</li>
-</ul>
-<h2>Selecting a model</h2>
-<ul>
-<li>Per session: <code>--model openai:gpt-5.5</code></li>
-<li>At runtime in the TUI: <code>/model google:gemini-2.5-pro</code></li>
-<li>Per tier: edit <code>tiers</code> in <code>polycode.config.json</code> (see <a href="configuration.html">Configuration</a>)</li>
-</ul>
-<p>The format is always <code>provider:model</code>, where provider is <code>openai</code>, <code>google</code>, or <code>xai</code>.</p>
-<h2>Capabilities</h2>
-<p>Each provider reports a <code>Capabilities</code> object (context window, max output, tool/reasoning/
-caching/vision/parallel flags) consumed by the loop. The numbers in
-<code>packages/providers/src/index.ts</code> are estimates — confirm against provider docs and adjust.</p>
+<p><code>/model</code> is always <code>provider:model</code>. Slash-containing NVIDIA ids work:
+<code>nvidia:nvidia/nemotron-3-nano-30b-a3b</code>.</p>
+<p>List the catalog:</p>
+<pre><code class="language-powershell">corepack pnpm -C &lt;repo&gt; exec poly --models
+# or from the CLI once built:  poly --models
+</code></pre>
+<p>In the TUI: <code>/model muse:muse-spark-1.2</code>.</p>
+<h2>Two adapter kinds (only)</h2>
+<ol>
+<li><strong>OpenAI-compat</strong> — <code>createOpenAI({ apiKey, baseURL })</code> wrapping the existing
+AI SDK adapter. Muse, NVIDIA NIM, Qwen, and <code>providers.custom</code> all use this.</li>
+<li><strong>Native SDK</strong> — <code>@ai-sdk/openai</code>, <code>@ai-sdk/google</code>, <code>@ai-sdk/xai</code>, <code>@ai-sdk/anthropic</code>.</li>
+</ol>
+<p>Anthropic uses the Messages API. Do not point Claude at an OpenAI base URL.</p>
+<h2>Training-tier / Contributor policy</h2>
+<p>Models whose id contains <code>contributor</code> (e.g. <code>muse-spark-1.2-contributor</code>) <strong>train
+the vendor on prompts and completions</strong>, including tool results. They are <strong>refused
+by default</strong>.</p>
+<pre><code class="language-json">{
+  &quot;allowTrainingTiers&quot;: false,
+  &quot;providers&quot;: { &quot;allow&quot;: [&quot;openai&quot;, &quot;google&quot;, &quot;anthropic&quot;, &quot;nvidia&quot;] }
+}
+</code></pre>
+<p>Set <code>allowTrainingTiers: true</code> only with an explicit legal opt-in. Company profile
+should leave it false.</p>
+<h2>On-prem NVIDIA NIM</h2>
+<p>Same provider id, different URL:</p>
+<pre><code class="language-powershell">$env:NVIDIA_BASE_URL = &quot;http://127.0.0.1:8000/v1&quot;
+poly --model nvidia:meta/llama-3.3-70b-instruct
+</code></pre>
+<p>Llama/Qwen <em>hosted by NIM</em> stay <code>nvidia:&lt;vendor&gt;/&lt;model&gt;</code>. Direct DashScope/Muse
+remain separate providers for keys that are not NIM.</p>
+<h2>Custom OpenAI-compat (no code change)</h2>
+<pre><code class="language-json">{
+  &quot;providers&quot;: {
+    &quot;custom&quot;: [{
+      &quot;id&quot;: &quot;local-nim&quot;,
+      &quot;baseURL&quot;: &quot;http://127.0.0.1:8000/v1&quot;,
+      &quot;envKey&quot;: &quot;NVIDIA_API_KEY&quot;,
+      &quot;models&quot;: [&quot;meta/llama-3.3-70b-instruct&quot;]
+    }]
+  }
+}
+</code></pre>
+<p>Then <code>/model local-nim:meta/llama-3.3-70b-instruct</code>.</p>
 <h2>Reasoning effort</h2>
-<p>The canonical <code>reasoningEffort</code> knob (<code>low</code> | <code>medium</code> | <code>high</code>) maps per provider in the
-adapter:</p>
+<p>Canonical <code>low | medium | high</code> maps in the adapter:</p>
 <ul>
-<li>OpenAI → <code>providerOptions.openai.reasoningEffort</code></li>
+<li>OpenAI / Muse / Qwen → <code>providerOptions.openai.reasoningEffort</code></li>
 <li>xAI → <code>providerOptions.xai.reasoningEffort</code></li>
 <li>Gemini → <code>providerOptions.google.thinkingConfig</code></li>
+<li>Anthropic → <code>providerOptions.anthropic.thinking</code></li>
 </ul>
-<h2>Adding a new provider</h2>
+<p>Muse Spark always reasons; do not send <code>&quot;none&quot;</code>.</p>
+<h2>Adding a provider</h2>
+<p>OpenAI-compat (Groq, Together, vLLM): add a <code>providers.custom</code> row. No PR required.</p>
+<p>First-class id (settings screen + catalog):</p>
 <ol>
-<li>Add the AI SDK provider package (e.g. <code>@ai-sdk/&lt;x&gt;</code>) to <code>@polycode/providers</code>.</li>
-<li>In <code>packages/providers/src/index.ts</code>: extend <code>ProviderId</code>, add a <code>Capabilities</code> const,
-add a <code>case</code> in <code>makeProvider</code>, and accept it in <code>parseModelArg</code>.</li>
-<li>Add it to <code>PROVIDERS</code> / <code>ENV_VAR</code> / labels in <code>@polycode/secrets</code> so the setup screen
-and key store know about it.</li>
-<li>If it has a non-standard reasoning param, extend <code>reasoningOptions()</code> in the adapter.</li>
+<li>Add a <code>CatalogEntry</code> in <code>packages/providers/src/catalog.ts</code>.</li>
+<li>If it is not OpenAI-compat, add one <code>kind</code> arm in <code>makeProvider</code> and an <code>@ai-sdk/*</code> dep.</li>
+<li>Add the id to <code>@polycode/secrets</code> (<code>PROVIDERS</code>, <code>ENV_VAR</code>, label, key URL).</li>
+<li>Extend <code>reasoningOptions()</code> if the vendor has a thinking knob.</li>
 </ol>
-<p>No changes to the agent loop, tools, router, or UI are required.</p>
-<blockquote>
-<p><strong>AI SDK version note:</strong> the adapter&#39;s <code>fullStream</code> part field names (<code>text-delta</code>,
-<code>reasoning-delta</code>, <code>tool-call</code>, <code>finish</code>) track AI SDK v5. Re-verify on a major SDK bump.</p>
-</blockquote>
+<p>No changes to the agent loop, tools, or TUI renderer.</p>
 
 <footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
 </main>

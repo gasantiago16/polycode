@@ -3,7 +3,18 @@ import { Text } from "ink";
 import { App } from "./app.js";
 import { Settings } from "./settings.js";
 import { configured, hydrateEnv, type ProviderId } from "@polycode/secrets";
-import type { CanonicalMessage, Provider, Sandbox, ToolSpec } from "@polycode/core";
+import type {
+  CanonicalMessage,
+  CompactConfig,
+  HookSet,
+  ModelUsage,
+  PermissionRule,
+  Provider,
+  Sandbox,
+  TodoItem,
+  ToolSpec,
+} from "@polycode/core";
+import type { LoadedWorkflow } from "@polycode/workflows";
 
 export interface Spec {
   provider: string;
@@ -28,7 +39,28 @@ export interface RootProps {
   /** Prior conversation to resume. */
   initialMessages?: CanonicalMessage[];
   /** Persist the conversation after each turn (session transcript). */
-  onPersist?: (messages: CanonicalMessage[], model: string) => void;
+  onPersist?: (
+    messages: CanonicalMessage[],
+    model: string,
+    extra?: { todos?: TodoItem[]; usage?: ModelUsage[] },
+  ) => void;
+  permissionRules?: PermissionRule[];
+  initialTodos?: TodoItem[];
+  initialUsage?: ModelUsage[];
+  compact?: CompactConfig;
+  skills?: Array<{ name: string; description: string; source: string }>;
+  resolveSkill?: (name: string, args: string) => string | null;
+  mcpStatus?: Array<{ name: string; ok: boolean; tools: string[]; error?: string }>;
+  plugins?: Array<{ name: string; description: string; version?: string; source: string }>;
+  openWorktree?: () => Promise<{ sandbox: Sandbox; path: string }>;
+  hooks?: HookSet;
+  workflows?: LoadedWorkflow[];
+  worktreeOps?: {
+    list: () => string[];
+    apply: (idOrPath: string) => Promise<{ files: string[]; path: string }>;
+    remove: (idOrPath: string) => Promise<string>;
+  };
+  statusLine?: { template?: string; command?: string };
 }
 
 /** Orchestrates first-run / on-demand settings vs. the main app. */
@@ -84,6 +116,19 @@ export function Root(props: RootProps) {
       onAgentic={props.onAgentic}
       initialMessages={props.initialMessages}
       onPersist={props.onPersist}
+      compact={props.compact}
+      skills={props.skills}
+      resolveSkill={props.resolveSkill}
+      permissionRules={props.permissionRules}
+      initialTodos={props.initialTodos}
+      initialUsage={props.initialUsage}
+      mcpStatus={props.mcpStatus}
+      plugins={props.plugins}
+      openWorktree={props.openWorktree}
+      hooks={props.hooks}
+      workflows={props.workflows}
+      worktreeOps={props.worktreeOps}
+      statusLine={props.statusLine}
     />
   );
 }

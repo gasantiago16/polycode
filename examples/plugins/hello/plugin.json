@@ -1,0 +1,5 @@
+{
+  "name": "hello",
+  "version": "0.1.0",
+  "description": "Example polycode plugin: a /hello command and a greeter child agent."
+}

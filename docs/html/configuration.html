@@ -42,7 +42,8 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Configuration</h1>
 <h2>Config file</h2>
@@ -88,8 +89,139 @@
 <td>Model for very large context.</td>
 </tr>
 </tbody></table>
-<p>Each tier is <code>{ &quot;provider&quot;: &quot;openai&quot; | &quot;google&quot; | &quot;xai&quot;, &quot;model&quot;: &quot;&lt;id&gt;&quot; }</code>.
-See <a href="providers.html">Providers &amp; Models</a> for current IDs.</p>
+<p>Each tier is <code>{ &quot;provider&quot;: &quot;&lt;id&gt;&quot;, &quot;model&quot;: &quot;&lt;id&gt;&quot; }</code> where provider is
+<code>openai</code> | <code>google</code> | <code>xai</code> | <code>muse</code> | <code>nvidia</code> | <code>qwen</code> | <code>anthropic</code> (or a
+<code>providers.custom</code> id). See <a href="providers.html">Providers &amp; Models</a>.</p>
+<pre><code class="language-json">&quot;allowTrainingTiers&quot;: false,
+&quot;providers&quot;: {
+  &quot;allow&quot;: [&quot;openai&quot;, &quot;google&quot;, &quot;anthropic&quot;, &quot;nvidia&quot;],
+  &quot;custom&quot;: [{ &quot;id&quot;: &quot;local-nim&quot;, &quot;baseURL&quot;: &quot;http://127.0.0.1:8000/v1&quot;, &quot;envKey&quot;: &quot;NVIDIA_API_KEY&quot; }]
+}
+</code></pre>
+<p><code>poly --models</code> prints the pinned catalog. <code>NVIDIA_BASE_URL</code> / <code>MUSE_BASE_URL</code> / <code>QWEN_BASE_URL</code> override hosted endpoints.</p>
+<p><code>&quot;profile&quot;: &quot;company&quot;</code> forces docker sandbox (fail-closed), <code>allowTrainingTiers: false</code>, and does not load <code>~/.grok/skills</code>. <code>&quot;web&quot;: false</code> removes <code>web_fetch</code> / <code>web_search</code>. Search keys: <code>TAVILY_API_KEY</code> or <code>BRAVE_API_KEY</code> (host env, not docker). <code>&quot;compat&quot;: { &quot;grokSkills&quot;: true }</code> also loads <code>~/.grok/skills</code> on non-company profiles.</p>
+<pre><code class="language-json">&quot;permissions&quot;: {
+  &quot;allow&quot;: [&quot;Bash(npm test*)&quot;],
+  &quot;deny&quot;: [&quot;Edit(.env)&quot;, &quot;Write(.env)&quot;]
+}
+</code></pre>
+<p>Deny wins. <code>.env</code> / <code>.git</code> / <code>.polycode</code> (except <code>reviews/</code> and <code>memory.md</code>) are protected outside yolo even without a deny rule. <code>@path/to/file.ts</code> in a prompt inlines the file; <code>@shot.png</code> attaches the image.</p>
+<h2>Project memory</h2>
+<p>Curated notes (not a transcript) live at <code>.polycode/memory.md</code>. <code>gatherContext</code> injects them as <code>&lt;memory&gt;</code> on session start. The <code>memory</code> tool (<code>read</code> / <code>append</code> / <code>replace</code>) writes through the sandbox. <code>/memory</code> is the TUI editor: show, <code>add &lt;note&gt;</code>, <code>clear</code>. Caps: 2k per append, 32k file.</p>
+<p>MCP (fail-soft): <code>.polycode/mcp.json</code> or <code>~/.config/polycode/mcp.json</code></p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;github&quot;: {
+      &quot;command&quot;: &quot;node&quot;,
+      &quot;args&quot;: [&quot;./mcp/github-server.js&quot;],
+      &quot;env&quot;: { &quot;GITHUB_PERSONAL_ACCESS_TOKEN&quot;: &quot;…&quot; },
+      &quot;permission&quot;: &quot;dangerous&quot;
+    },
+    &quot;remote&quot;: { &quot;url&quot;: &quot;https://example.com/mcp&quot;, &quot;headers&quot;: { &quot;Authorization&quot;: &quot;Bearer …&quot; } }
+  }
+}
+</code></pre>
+<p><code>npx</code> / <code>npm</code> / <code>pnpm</code> / <code>yarn</code> / <code>bunx</code> as <code>command</code> are <strong>refused</strong> (they download and run
+registry packages). Point <code>command</code> at a local binary. To override, set <code>&quot;allowRegistry&quot;: true</code>
+on that server <strong>and</strong> <code>&quot;mcp&quot;: { &quot;allowRegistrySpawns&quot;: true }</code> in config. Company profile
+never allows the override.</p>
+<p>Tools show up as <code>mcp__github__…</code> and go through the same permission engine. <code>/mcp</code> lists status.</p>
+<p>MCP <strong>input schemas are deferred</strong> by default: <code>parameters</code> sent to the model are a stub (<code>additionalProperties: true</code>) until <code>mcp_search</code> hydrates a match (max 8) or the tool is first called. Set <code>&quot;mcp&quot;: { &quot;deferSchemas&quot;: false }</code> to inject every schema at connect (old behavior). <code>/context</code> tool-schemas line is the budget check.</p>
+<h2>Status line</h2>
+<p>Default idle line: <code>$model · $mode · route:$route · sandbox:$sandbox$ctx_seg$sum_seg$mcp_seg</code>.</p>
+<pre><code class="language-json">&quot;statusLine&quot;: {
+  &quot;template&quot;: &quot;$model · $mode$ctx_seg$cost_seg&quot;,
+  &quot;command&quot;: &quot;echo $MODEL $CTX&quot;
+}
+</code></pre>
+<p><code>/statusline $model $cwd</code> sets it for the session. Tokens: <code>$model</code> <code>$mode</code> <code>$route</code> <code>$sandbox</code> <code>$ctx</code> <code>$ctx_seg</code> <code>$ctx_pct</code> <code>$sum</code> <code>$sum_seg</code> <code>$mcp</code> <code>$mcp_seg</code> <code>$deferred</code> <code>$cost</code> <code>$cost_seg</code> <code>$cwd</code>. Optional <code>command</code> runs through the sandbox (800ms) with the same tokens (<code>$MODEL</code> also works); first stdout line wins, else the template.</p>
+<h2>Lifecycle hooks</h2>
+<pre><code class="language-json">&quot;hooks&quot;: {
+  &quot;PreToolUse&quot;: [{ &quot;matcher&quot;: &quot;bash&quot;, &quot;command&quot;: &quot;echo $TOOL_NAME&quot; }],
+  &quot;UserPromptSubmit&quot;: [{ &quot;command&quot;: &quot;echo $PROMPT&quot; }],
+  &quot;SessionStart&quot;: [{ &quot;command&quot;: &quot;echo session&quot; }]
+}
+</code></pre>
+<p>Commands run through the <strong>sandbox</strong> (<code>local</code> shell or docker). <code>matcher</code> is a case-insensitive regex against the tool name (<code>PreToolUse</code> / <code>PostToolUse</code>) or subagent type (<code>SubagentStart</code> / <code>SubagentStop</code>). Empty matcher = every event.</p>
+<p>A <strong>nonzero</strong> exit on <code>PreToolUse</code> denies the tool (same as a permission deny). A nonzero <code>UserPromptSubmit</code> drops the prompt before it reaches the model. Other events never block.</p>
+<table>
+<thead>
+<tr>
+<th>Event</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>SessionStart</code></td>
+<td>First <code>run()</code> / TUI mount (once per Agent).</td>
+</tr>
+<tr>
+<td><code>UserPromptSubmit</code></td>
+<td>Before a user turn is appended.</td>
+</tr>
+<tr>
+<td><code>PreToolUse</code> / <code>PostToolUse</code></td>
+<td>Around each tool execution.</td>
+</tr>
+<tr>
+<td><code>SubagentStart</code> / <code>SubagentStop</code></td>
+<td>Around <code>task</code> / <code>/explore</code> / <code>/review</code> / workflow children.</td>
+</tr>
+<tr>
+<td><code>Stop</code></td>
+<td>When a <code>run()</code> returns (including interrupt).</td>
+</tr>
+<tr>
+<td><code>SessionEnd</code></td>
+<td>TUI exit / unmount, or hosted request finish.</td>
+</tr>
+</tbody></table>
+<p>Substitutions: <code>$TOOL_NAME</code>, <code>$FILE</code> (input <code>path</code>), <code>$TOOL_INPUT</code> (JSON), <code>$PROMPT</code>, <code>$OUTPUT</code> (PostToolUse), <code>$SUBAGENT_TYPE</code>.</p>
+<h2>Workflows</h2>
+<p>JSON files in <code>.polycode/workflows/</code> (project) or <code>~/.config/polycode/workflows/</code> (user). Project wins over user, user over bundled (<code>deep-research</code>). <code>/workflows</code> lists them; <code>/workflow &lt;name&gt; [query]</code> or <code>/workflow name slug=x leftover query</code> runs one.</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;review-changes&quot;,
+  &quot;description&quot;: &quot;Explore, then cranky-review&quot;,
+  &quot;budget&quot;: 4,
+  &quot;parallel&quot;: [
+    { &quot;description&quot;: &quot;scan&quot;, &quot;subagent_type&quot;: &quot;explore&quot;, &quot;prompt&quot;: &quot;Map $query. Read-only.&quot; }
+  ],
+  &quot;steps&quot;: [
+    { &quot;description&quot;: &quot;review&quot;, &quot;subagent_type&quot;: &quot;review&quot;, &quot;prompt&quot;: &quot;Review using:\n$results&quot;, &quot;isolation&quot;: &quot;none&quot; }
+  ],
+  &quot;synthesize&quot;: { &quot;prompt&quot;: &quot;Summarize:\n$results&quot;, &quot;subagent_type&quot;: &quot;general&quot; }
+}
+</code></pre>
+<p><code>$query</code> / <code>$slug</code> / <code>$results</code> expand before each job. <code>isolation: &quot;worktree&quot;</code> gives that child a detached git worktree (not merged; <code>/worktree apply &lt;id&gt;</code> copies files onto the parent). The runner is TypeScript (<code>agent</code> / <code>parallel</code> / sequential <code>steps</code>), not Rhai. A panel that would exceed <code>budget</code> (default 16) launches none of its jobs.</p>
+<p><code>task isolation=worktree</code> also creates trees under <code>.polycode/worktrees/&lt;id&gt;</code>.</p>
+<h2>Session / compaction</h2>
+<pre><code class="language-json">&quot;session&quot;: {
+  &quot;autoCompactThresholdPercent&quot;: 85,
+  &quot;keepRecentTurns&quot;: 8,
+  &quot;keepRecentToolResults&quot;: 6
+}
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>autoCompactThresholdPercent</code></td>
+<td>Auto-compact when estimated tokens ≥ this % of the model window (default 85).</td>
+</tr>
+<tr>
+<td><code>keepRecentTurns</code></td>
+<td>Trailing user-turns kept verbatim in pass 2 (default 8).</td>
+</tr>
+<tr>
+<td><code>keepRecentToolResults</code></td>
+<td>Trailing tool messages kept intact in pass 1 (default 6).</td>
+</tr>
+</tbody></table>
+<p>Pass 2 summaries use the <strong>cheap</strong> tier. <code>/compact [focus]</code> always runs; <code>/context</code> prints the breakdown. A shrink under 10% sticky-suppresses further auto-compacts.</p>
 <h2>Routing</h2>
 <p><code>@polycode/router</code> classifies each user turn into a tier, then builds (and memoizes) the
 <code>Provider</code> for that tier. Two strategies:</p>
@@ -150,13 +282,52 @@ per-turn auto-routing with <code>/route auto|off|status</code> (auto-routing is 
 </tr>
 <tr>
 <td><code>--serve</code></td>
-<td>Run the HTTP+SSE server instead of the TUI.</td>
+<td>Run the HTTP+SSE server instead of the TUI (<code>POLYCODE_AUTH_TOKEN</code>).</td>
 </tr>
 <tr>
 <td><code>--port &lt;n&gt;</code></td>
 <td>Server port (default 8787).</td>
 </tr>
+<tr>
+<td><code>--host &lt;addr&gt;</code></td>
+<td>Bind address (default 127.0.0.1).</td>
+</tr>
 </tbody></table>
+<h2>Hosted mode</h2>
+<pre><code class="language-json">&quot;hosted&quot;: {
+  &quot;mode&quot;: &quot;plan&quot;,
+  &quot;rateLimit&quot;: { &quot;windowMs&quot;: 60000, &quot;max&quot;: 30, &quot;concurrent&quot;: 2 },
+  &quot;maxBodyBytes&quot;: 1000000,
+  &quot;maxMessageChars&quot;: 32000,
+  &quot;trustProxy&quot;: false
+}
+</code></pre>
+<p>See <a href="security.html">Security &amp; Keys</a>. The serve path uses the same tools, compaction, hooks,
+and permission rules as the TUI.</p>
+<h2>Plugins</h2>
+<p>A plugin is a directory with <code>plugin.json</code> (or <code>.polycode-plugin/plugin.json</code>) plus any of
+<code>skills/</code>, <code>commands/</code>, <code>agents/</code>, <code>hooks/hooks.json</code>, <code>mcp.json</code>, <code>lsp.json</code>.</p>
+<pre><code>.polycode/plugins/hello/
+  plugin.json
+  commands/hello.md
+  agents/greeter.md
+</code></pre>
+<p>Project plugins override user (<code>~/.config/polycode/plugins</code>). <code>&quot;plugins&quot;: { &quot;disable&quot;: [&quot;hello&quot;] }</code>
+skips a name. Copy <code>examples/plugins/hello</code> to try. Slash skills from plugins show up in <code>/skills</code>;
+agents become <code>task</code> <code>subagent_type</code>s.</p>
+<h2>LSP</h2>
+<p>Copy <code>examples/lsp.json</code> to <code>.polycode/lsp.json</code> (or ship servers from a plugin). The <code>lsp</code> tool
+is registered only when at least one server is configured. It speaks JSON-RPC stdio
+(<code>hover</code> / <code>definition</code> / <code>references</code> / <code>documentSymbol</code>) and fail-softs if the binary is missing.
+The language server reads the real project files (host process, not docker-jailed shell).</p>
+<h2>IDE bridge</h2>
+<p>With <code>poly --serve</code>, an editor can:</p>
+<ol>
+<li><code>POST /ide/context</code> with the active file/selection</li>
+<li><code>POST /chat</code> — the snapshot is prepended as an <code>&lt;ide&gt;</code> block</li>
+<li><code>GET /ide/catalog</code> for tools/plugins</li>
+</ol>
+<p>Same bearer/<code>X-Api-Key</code> as <code>/chat</code>.</p>
 <h2>Sandbox</h2>
 <p><code>sandbox</code> selects where tools execute (see <a href="security.html">Security &amp; Keys</a>):</p>
 <pre><code class="language-json">&quot;sandbox&quot;: { &quot;kind&quot;: &quot;docker&quot;, &quot;image&quot;: &quot;node:22-alpine&quot;, &quot;network&quot;: false, &quot;memory&quot;: &quot;1g&quot; }
@@ -164,7 +335,7 @@ per-turn auto-routing with <code>/route auto|off|status</code> (auto-routing is 
 <ul>
 <li><code>kind</code>: <code>local</code> (host shell, default) or <code>docker</code> (shell in an isolated container).</li>
 <li><code>image</code> / <code>network</code> / <code>memory</code>: docker-only knobs. Override <code>kind</code> at launch with
-<code>--sandbox docker</code>. Falls back to <code>local</code> (with a warning) if Docker is unavailable.</li>
+<code>--sandbox docker</code>. <strong>Fails closed</strong> if Docker is unavailable (no silent local fallback).</li>
 </ul>
 <h2>Environment variables</h2>
 <table>

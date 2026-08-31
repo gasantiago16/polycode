@@ -2,6 +2,13 @@ node_modules
 **/node_modules
 **/dist
 .git
+.grok
+.polycode
+coverage
+docs/html
+**/*.test.ts
+**/*.ux.test.ts
 .env
 *.log
-docs/html
+*.tsbuildinfo
+.DS_Store

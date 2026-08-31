@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LocalSandbox } from "@polycode/sandbox";
-import { edit, glob, multiEdit, read } from "./index.js";
+import { edit, glob, grep, multiEdit, read } from "./index.js";
 
 const dirs: string[] = [];
 async function fixture(text: string) {
@@ -54,5 +54,12 @@ describe("editing tools", () => {
     const result = await glob.run({ pattern: "**/*.ts" }, ctx);
     expect(result.output.split("\n").sort()).toEqual(["src/nested.ts", "top.ts"]);
     expect(root).toBeTruthy();
+  });
+
+  it("refuses to grep a protected path", async () => {
+    const { ctx } = await fixture("x");
+    const result = await grep.run({ pattern: "SECRET", path: ".env" }, ctx);
+    expect(result.isError).toBe(true);
+    expect(result.output).toMatch(/not accessible/);
   });
 });

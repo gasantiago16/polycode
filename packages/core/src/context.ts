@@ -1,4 +1,5 @@
 import type { Sandbox } from "./types.js";
+import { MEMORY_PATH, readMemory } from "./memory.js";
 
 /**
  * Builds the "what world am I in" preamble that gets appended to the system
@@ -77,6 +78,14 @@ export async function gatherContext(opts: ContextOptions): Promise<string> {
       raw.length > maxConventionBytes ? raw.slice(0, maxConventionBytes) + "\n…[truncated]" : raw;
     sections.push(`<project_conventions source="${name}">\n${body.trim()}\n</project_conventions>`);
     break;
+  }
+
+  // --- curated project memory (agent-written, not a transcript) ---
+  const mem = await readMemory(sandbox);
+  if (mem.trim()) {
+    const body =
+      mem.length > maxConventionBytes ? mem.slice(0, maxConventionBytes) + "\n…[truncated]" : mem;
+    sections.push(`<memory path="${MEMORY_PATH}">\n${body.trim()}\n</memory>`);
   }
 
   return sections.join("\n\n");

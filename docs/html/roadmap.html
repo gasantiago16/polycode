@@ -42,9 +42,15 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html" class="active">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Claude-Code Parity Roadmap</h1>
+<blockquote>
+<p>Release status: <strong>0.1.0-alpha</strong>. Local mode is under active stabilization. Hosted mode is
+development-only until authentication, isolation, quotas, and restrictive permission policy
+are implemented.</p>
+</blockquote>
 <p>polycode aims to be a Claude-Code-class terminal coding agent that is <strong>provider-agnostic</strong>
 across OpenAI, Google Gemini, and xAI (Grok). The engine was structurally sound early on
 (provider-blind loop, clean sandbox/permission seams) but <em>thin</em> — this roadmap tracks the
@@ -131,11 +137,17 @@ never crashes a turn.</li>
 <p>Verification: <code>pnpm typecheck</code> clean; harness round-trips a real agent conversation (save → load →
 seed a fresh agent → continue), and <code>--sessions</code> + live smoke pass.</p>
 <h2>Future work</h2>
-<h3>Later</h3>
+<p>Phases 1–4 were &quot;basic parity.&quot; The forward plan to <strong>Claude-Code-class</strong> — MCP, context
+compaction, subagents, skills/commands, web tools, hooks, checkpoints, server hardening — is laid
+out, sequenced, and grounded in a code audit + feature diff in the
+<a href="buildout-plan.html"><strong>Build-out Plan</strong></a>. Start there.</p>
+<h3>Highlights from the plan</h3>
 <ul>
-<li>Context compaction when history approaches the model&#39;s window (summarize-and-drop).</li>
-<li>Parallel-safe tool batching wired into the loop.</li>
-<li>Agentic key provisioning — the Settings <code>a</code> hook is currently a stub (MCP/tool flow TODO).</li>
+<li><strong>Phase 5.0</strong> — pre-flight ground truth (verify model IDs, pin AI SDK, fill real context windows).</li>
+<li><strong>Phase 5.1</strong> — MCP client (force multiplier; cheap via the AI SDK&#39;s <code>experimental_createMCPClient</code>).</li>
+<li><strong>Phase 5.2</strong> — context compaction (correctness: history is currently unbounded).</li>
+<li><strong>Phase 5.3 / 5.4 / 5.5</strong> — subagents, skills/commands, web tools + todo.</li>
+<li>Agentic key provisioning — the Settings <code>a</code> hook is still a stub (MCP/tool flow TODO).</li>
 </ul>
 <h2>Status at a glance</h2>
 <table>

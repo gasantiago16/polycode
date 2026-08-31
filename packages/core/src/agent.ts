@@ -9,8 +9,32 @@ import type {
   ToolCallPart,
   ToolResultPart,
   StopReason,
+  SpawnChildInput,
+  ToolRunResult,
+  TodoItem,
 } from "./types.js";
 import { PermissionEngine } from "./permissions.js";
+import {
+  compactMessages,
+  contextBreakdown,
+  estimateTokens,
+  formatContextBreakdown,
+  overThreshold,
+  reducedEnough,
+  type CompactConfig,
+  type CompactReason,
+  type CompactStats,
+  type ContextBreakdown,
+} from "./compact.js";
+import {
+  clipChildOutput,
+  parseChildType,
+  systemForChild,
+  toolsForChild,
+} from "./subagent.js";
+import { redactSecrets } from "./redact.js";
+import { formatCost, type ModelUsage } from "./cost.js";
+import { runHooks, type HookSet } from "./hooks.js";
 
 /** Events the UI / server consume: canonical stream events plus tool lifecycle. */
 export type AgentUIEvent =
@@ -18,7 +42,8 @@ export type AgentUIEvent =
   | { type: "tool_executing"; call: ToolCallPart }
   | { type: "tool_result"; result: ToolResultPart; display?: string }
   | { type: "tool_denied"; call: ToolCallPart; reason?: string }
-  | { type: "turn_complete"; usage?: { inputTokens: number; outputTokens: number } };
+  | { type: "turn_complete"; usage?: { inputTokens: number; outputTokens: number } }
+  | { type: "compacted"; stats: CompactStats };
 
 export interface AgentOptions {
   system?: string;
@@ -29,6 +54,21 @@ export interface AgentOptions {
   maxRetries?: number;
   /** Seed the conversation (e.g. resuming a saved session). */
   initialMessages?: CanonicalMessage[];
+  /** Two-pass context compaction (Grok-shaped). Default enabled. */
+  compact?: CompactConfig;
+  /** Child agents cannot spawn children (depth 1). */
+  isChild?: boolean;
+  initialTodos?: TodoItem[];
+  initialUsage?: ModelUsage[];
+  /** Create an isolated sandbox (git worktree) for a child agent. */
+  openWorktree?: () => Promise<{ sandbox: Sandbox; path: string }>;
+  /** Lifecycle hooks (PreToolUse nonzero denies the tool). */
+  hooks?: HookSet;
+}
+
+interface FileCheckpoint {
+  messageLength: number;
+  files: Record<string, string | null>;
 }
 
 /**
@@ -41,6 +81,14 @@ export interface AgentOptions {
  */
 export class Agent {
   private messages: CanonicalMessage[];
+  /** After a failed/no-op auto-compact, skip auto until a successful one. */
+  private compactSuppressed = false;
+  private usage: ModelUsage[] = [];
+  private todos: TodoItem[] = [];
+  private checkpoints: FileCheckpoint[] = [];
+  private createdWorktrees: string[] = [];
+  private sessionStart?: Promise<void>;
+  private sessionEnded = false;
 
   constructor(
     private provider: Provider,
@@ -51,6 +99,8 @@ export class Agent {
     // Deep-copy: the seed is owned by the caller (e.g. a loaded session); a
     // shallow copy would share content objects and risk cross-mutation.
     this.messages = opts.initialMessages ? structuredClone(opts.initialMessages) : [];
+    this.todos = opts.initialTodos ? structuredClone(opts.initialTodos) : [];
+    this.usage = opts.initialUsage ? structuredClone(opts.initialUsage) : [];
   }
 
   /** Runtime model switching (/model) swaps the provider without losing history. */
@@ -61,12 +111,216 @@ export class Agent {
     return this.provider;
   }
 
-  pushUser(text: string): void {
-    this.messages.push({ role: "user", content: [{ type: "text", text }] });
+  pushUser(text: string, extra: ContentPart[] = []): void {
+    const content: ContentPart[] = [{ type: "text", text }];
+    for (const p of extra) {
+      if (p.type === "image") content.push(p);
+    }
+    this.messages.push({ role: "user", content });
+  }
+
+  /**
+   * UserPromptSubmit hook then pushUser. If blocked, the prompt is not appended.
+   */
+  async submitPrompt(
+    text: string,
+    extra: ContentPart[] = [],
+  ): Promise<{ blocked: boolean; reason?: string }> {
+    const r = await this.fireHooks("UserPromptSubmit", { prompt: text });
+    if (r.blocked) return r;
+    this.pushUser(text, extra);
+    return r;
+  }
+
+  sessionWorktrees(): readonly string[] {
+    return this.createdWorktrees;
+  }
+
+  async startSession(): Promise<void> {
+    if (this.opts.isChild) return;
+    this.sessionStart ??= this.fireHooks("SessionStart", {}).then(() => undefined);
+    await this.sessionStart;
+  }
+
+  async endSession(): Promise<void> {
+    if (this.opts.isChild || this.sessionEnded) return;
+    this.sessionEnded = true;
+    await this.fireHooks("SessionEnd", {});
+  }
+
+  private async fireHooks(
+    event: Parameters<typeof runHooks>[1],
+    ctx: Parameters<typeof runHooks>[3],
+  ): Promise<{ blocked: boolean; reason?: string }> {
+    if (!this.opts.hooks) return { blocked: false };
+    try {
+      return await runHooks(this.opts.hooks, event, this.opts.sandbox, ctx);
+    } catch (e) {
+      if (event === "PreToolUse" || event === "UserPromptSubmit") {
+        return { blocked: true, reason: String(e) };
+      }
+      return { blocked: false };
+    }
   }
 
   history(): readonly CanonicalMessage[] {
     return this.messages;
+  }
+
+  contextView(): ContextBreakdown {
+    return contextBreakdown({
+      messages: this.messages,
+      system: this.opts.system,
+      toolSchemaChars: this.tools.reduce((n, t) => n + t.name.length + t.description.length + JSON.stringify(t.parameters).length, 0),
+      contextWindow: this.provider.capabilities().contextWindow,
+    });
+  }
+
+  formatContext(): string {
+    return formatContextBreakdown(this.contextView());
+  }
+
+  usageLedger(): readonly ModelUsage[] {
+    return this.usage;
+  }
+
+  formatCost(): string {
+    return formatCost(this.usage);
+  }
+
+  listTodos(): readonly TodoItem[] {
+    return this.todos;
+  }
+
+  /**
+   * Restore files from the last mutating-tool checkpoint and truncate history
+   * to just before that assistant turn.
+   */
+  async rewind(): Promise<{ files: string[]; dropped: number } | null> {
+    const cp = this.checkpoints.pop();
+    if (!cp) return null;
+    const dropped = this.messages.length - cp.messageLength;
+    this.messages = this.messages.slice(0, cp.messageLength);
+    const files: string[] = [];
+    for (const [path, body] of Object.entries(cp.files)) {
+      if (body === null) continue; // created file; leave it rather than delete
+      try {
+        await this.opts.sandbox.writeFile(path, body);
+        files.push(path);
+      } catch {
+        /* best-effort */
+      }
+    }
+    return { files, dropped };
+  }
+
+  private async captureCheckpoint(calls: ToolCallPart[]): Promise<void> {
+    const files: Record<string, string | null> = {};
+    for (const c of calls) {
+      const path = (c.input as { path?: string } | undefined)?.path;
+      if (typeof path !== "string" || path in files) continue;
+      try {
+        files[path] = await this.opts.sandbox.readFile(path);
+      } catch {
+        files[path] = null;
+      }
+    }
+    if (!Object.keys(files).length) return;
+    this.checkpoints.push({ messageLength: Math.max(0, this.messages.length - 1), files });
+    if (this.checkpoints.length > 20) this.checkpoints.shift();
+  }
+
+  /** Run a depth-1 child loop. Parent history gets only the returned text. */
+  async spawnChild(input: SpawnChildInput, signal?: AbortSignal): Promise<ToolRunResult> {
+    if (this.opts.isChild) {
+      return { output: "nested task is not allowed (max depth 1)", isError: true };
+    }
+    let type;
+    try {
+      type = parseChildType(input.subagent_type);
+    } catch (e) {
+      return { output: String(e), isError: true };
+    }
+    let childSandbox = this.opts.sandbox;
+    let worktreeNote = "";
+    if (input.isolation === "worktree") {
+      if (!this.opts.openWorktree) {
+        return { output: "worktree isolation is not configured in this session", isError: true };
+      }
+      try {
+        const wt = await this.opts.openWorktree();
+        childSandbox = wt.sandbox;
+        this.createdWorktrees.push(wt.path);
+        worktreeNote = `\n\n[worktree ${wt.path} — not merged. /worktree apply <id> to copy onto the parent tree]`;
+      } catch (e) {
+        return { output: `worktree failed: ${String(e)}`, isError: true };
+      }
+    }
+    await this.fireHooks("SubagentStart", { prompt: input.prompt, subagentType: type });
+    const child = new Agent(this.provider, toolsForChild(type, this.tools), this.permissions, {
+      sandbox: childSandbox,
+      system: systemForChild(type, this.opts.system),
+      compact: this.opts.compact,
+      maxSteps: 30,
+      isChild: true,
+      hooks: this.opts.hooks,
+    });
+    child.pushUser(input.prompt);
+    try {
+      for await (const _ev of child.run(signal)) {
+        /* parent does not ingest child stream — isolation is the point */
+      }
+    } catch (e) {
+      if (signal?.aborted) return { output: "child interrupted", isError: true };
+      return { output: `child failed: ${String(e)}`, isError: true };
+    } finally {
+      await this.fireHooks("SubagentStop", { prompt: input.prompt, subagentType: type });
+    }
+    const last = [...child.history()].reverse().find((m) => m.role === "assistant");
+    const text = last
+      ? last.content
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join("")
+          .trim()
+      : "";
+    return { output: clipChildOutput(text || "(child produced no text)") + worktreeNote };
+  }
+
+  /**
+   * Run two-pass compaction now. Manual always applies; auto no-ops when under
+   * the threshold or sticky-suppressed. Returns null if nothing ran.
+   */
+  async compactNow(reason: CompactReason = "manual", focus?: string): Promise<CompactStats | null> {
+    const cfg = this.opts.compact;
+    if (cfg?.enabled === false) return null;
+    const window = this.provider.capabilities().contextWindow;
+    const before = estimateTokens(this.messages);
+    if (reason === "auto") {
+      if (this.compactSuppressed) return { before, after: before, reason, pass: "none", suppressed: true };
+      if (!overThreshold(before, window, cfg?.thresholdPercent)) return null;
+    }
+    try {
+      const { messages, stats } = await compactMessages({
+        messages: this.messages,
+        contextWindow: window,
+        reason,
+        focus,
+        config: cfg,
+        system: this.opts.system,
+      });
+      const enough = reducedEnough(stats.before, stats.after);
+      if (enough || reason === "manual") {
+        this.messages = messages;
+        this.compactSuppressed = false;
+        return { ...stats, after: estimateTokens(this.messages) };
+      }
+      this.compactSuppressed = true;
+      return { ...stats, suppressed: true };
+    } catch {
+      if (reason === "auto") this.compactSuppressed = true;
+      return { before, after: before, reason, pass: "none", suppressed: true };
+    }
   }
 
   async *run(signal?: AbortSignal): AsyncGenerator<AgentUIEvent> {
@@ -74,8 +328,15 @@ export class Agent {
     const maxSteps = this.opts.maxSteps ?? 50;
     const maxRetries = this.opts.maxRetries ?? 2;
     let steps = 0;
+    await this.startSession();
 
+    try {
     while (true) {
+      const compacted = await this.compactNow("auto");
+      if (compacted && compacted.pass !== "none") {
+        yield { type: "compacted", stats: compacted };
+      }
+
       if (steps++ >= maxSteps) {
         yield {
           type: "error",
@@ -161,6 +422,20 @@ export class Agent {
       // Settled turn → emit usage exactly once. The retry loop above has already
       // collapsed any replayed `stop` events, so a UI can sum per-turn usage
       // here without double-counting a retried turn.
+      if (usage) {
+        const key = `${this.provider.id}:${this.provider.model}`;
+        const row = this.usage.find((u) => u.model === key);
+        if (row) {
+          row.inputTokens += usage.inputTokens;
+          row.outputTokens += usage.outputTokens;
+        } else {
+          this.usage.push({
+            model: key,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+          });
+        }
+      }
       yield { type: "turn_complete", usage };
 
       if (stop !== "tool_use" || pending.length === 0) {
@@ -171,7 +446,24 @@ export class Agent {
       // run concurrently — they're "safe" class, so they never prompt and can't
       // overlap permission dialogs; everything else runs sequentially. Results
       // are appended in call order regardless, so the model sees them in order.
-      const ctx: ToolContext = { sandbox: this.opts.sandbox, signal };
+      const ctx: ToolContext = {
+        sandbox: this.opts.sandbox,
+        signal,
+        todos: {
+          list: () => this.todos,
+          replace: (items) => {
+            this.todos = items;
+          },
+        },
+      };
+      if (!this.opts.isChild) {
+        ctx.spawnChild = (input) => this.spawnChild(input, signal);
+      }
+      const mutating = pending.filter((c) => {
+        const t = toolMap.get(c.name);
+        return t && t.permission !== "safe";
+      });
+      if (mutating.length) await this.captureCheckpoint(mutating);
       const results: ToolResultPart[] = [];
 
       const execOne = async (
@@ -187,22 +479,32 @@ export class Agent {
           const result = errorResult(call, `Denied: ${decision.reason ?? "permission"}`);
           return { events: [{ type: "tool_denied", call, reason: decision.reason }], result };
         }
+        const pre = await this.fireHooks("PreToolUse", { tool, input: call.input });
+        if (pre.blocked) {
+          const result = errorResult(call, `Denied: ${pre.reason ?? "hook"}`);
+          return { events: [{ type: "tool_denied", call, reason: pre.reason }], result };
+        }
         const events: AgentUIEvent[] = [{ type: "tool_executing", call }];
         let result: ToolResultPart;
         let display: string | undefined;
         try {
           const r = await tool.run(call.input, ctx);
+          const redacted = redactSecrets(r.output);
           result = {
             type: "tool_result",
             id: call.id,
             name: call.name,
-            output: r.output,
+            output:
+              redacted.count > 0
+                ? `${redacted.text}\n[${redacted.count} secret(s) redacted]`
+                : redacted.text,
             isError: r.isError,
           };
           display = r.display; // UI-only; never enters `result`/model messages
         } catch (err) {
           result = errorResult(call, String(err));
         }
+        await this.fireHooks("PostToolUse", { tool, input: call.input, output: result.output });
         events.push({ type: "tool_result", result, display });
         return { events, result };
       };
@@ -235,6 +537,9 @@ export class Agent {
 
       this.messages.push({ role: "tool", content: results });
       // loop: feed tool results back to the model on the next turn
+    }
+    } finally {
+      if (!this.opts.isChild) await this.fireHooks("Stop", {});
     }
   }
 }

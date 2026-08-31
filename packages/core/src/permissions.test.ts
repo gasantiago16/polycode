@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { PermissionEngine, type PermissionChoice } from "./permissions.js";
+import { compileRules, PermissionEngine, type PermissionChoice } from "./permissions.js";
 import type { PermissionClass, ToolSpec } from "./types.js";
 
 function tool(name: string, permission: PermissionClass): ToolSpec {
@@ -53,5 +53,52 @@ describe("PermissionEngine", () => {
     const prompt = vi.fn(async () => "deny" as const);
     expect((await new PermissionEngine("yolo", prompt).check(tool("bash", "dangerous"), {})).allow).toBe(true);
     expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("deny rules beat allow and skip the prompt", async () => {
+    const prompt = vi.fn(async () => "once" as const);
+    const rules = compileRules({ deny: ["Bash(rm *)"], allow: ["Bash(npm test*)"] });
+    const engine = new PermissionEngine("ask", prompt, rules);
+    expect((await engine.check(tool("bash", "dangerous"), { command: "rm -rf /" })).allow).toBe(false);
+    expect((await engine.check(tool("bash", "dangerous"), { command: "npm test" })).allow).toBe(true);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("deny rules beat the safe-class short-circuit", async () => {
+    const prompt = vi.fn(async () => "once" as const);
+    const engine = new PermissionEngine("plan", prompt, compileRules({ deny: ["Read"] }));
+    expect((await engine.check(tool("read", "safe"), { path: "src/a.ts" })).allow).toBe(false);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("blocks .env writes outside yolo", async () => {
+    const prompt = vi.fn(async () => "once" as const);
+    const engine = new PermissionEngine("ask", prompt);
+    expect(await engine.check(tool("write", "mutating"), { path: ".env" })).toEqual({
+      allow: false,
+      reason: "protected path (.env / .git / .polycode)",
+    });
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("blocks safe reads of .env and bash that names it", async () => {
+    const prompt = vi.fn(async () => "once" as const);
+    const engine = new PermissionEngine("ask", prompt);
+    expect((await engine.check(tool("read", "safe"), { path: ".env" })).allow).toBe(false);
+    expect((await engine.check(tool("bash", "dangerous"), { command: "cat .env" })).allow).toBe(false);
+    expect((await engine.check(tool("bash", "dangerous"), { command: "python -c \"open('.env')\"" })).allow).toBe(
+      false,
+    );
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it("allows .polycode/memory.md the same way as reviews", async () => {
+    const prompt = vi.fn(async () => "once" as const);
+    const engine = new PermissionEngine("ask", prompt);
+    expect((await engine.check(tool("write", "mutating"), { path: ".polycode/memory.md" })).allow).toBe(true);
+    expect(
+      (await engine.check(tool("write", "mutating"), { path: ".polycode/sessions/x.json" })).allow,
+    ).toBe(false);
+    expect(prompt).toHaveBeenCalledOnce();
   });
 });

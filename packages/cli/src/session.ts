@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join, relative } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { CanonicalMessage } from "@polycode/core";
+import type { CanonicalMessage, ModelUsage, TodoItem } from "@polycode/core";
 
 /**
  * Session transcripts: the conversation (canonical messages) is persisted to
@@ -17,7 +17,7 @@ import type { CanonicalMessage } from "@polycode/core";
  * polycode's first on-disk log surface. `.polycode/` is gitignored and ignored
  * by the sandbox walk, so transcripts never pollute search/context.
  */
-const VERSION = 1;
+const VERSION = 2;
 
 export interface SessionMeta {
   id: string;
@@ -30,6 +30,8 @@ export interface SessionMeta {
 
 export interface SessionData extends SessionMeta {
   messages: CanonicalMessage[];
+  todos?: TodoItem[];
+  usage?: ModelUsage[];
 }
 
 export class SessionStore {
@@ -62,7 +64,7 @@ export class SessionStore {
     const f = this.file(data.id);
     // Write-then-rename so a crash mid-write can't leave a truncated transcript.
     const tmp = `${f}.tmp`;
-    writeFileSync(tmp, JSON.stringify({ version: VERSION, ...data }, null, 2), "utf8");
+    writeFileSync(tmp, JSON.stringify({ version: VERSION, ...stripSessionSecrets(data) }, null, 2), "utf8");
     renameSync(tmp, f);
   }
 
@@ -113,6 +115,21 @@ export class SessionStore {
     const metas = this.list();
     return metas.length ? this.load(metas[0].id) : null;
   }
+}
+
+/** Drop raw image bytes from transcripts (keep a path marker). */
+function stripSessionSecrets(data: SessionData): SessionData {
+  return {
+    ...data,
+    messages: data.messages.map((m) => ({
+      ...m,
+      content: m.content.map((p) =>
+        p.type === "image"
+          ? { type: "text" as const, text: `[image ${p.path ?? p.mediaType} omitted from session]` }
+          : p,
+      ),
+    })),
+  };
 }
 
 /** Short title from the first user message. */

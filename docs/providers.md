@@ -1,61 +1,108 @@
 # Providers & Models
 
-Supported providers: **OpenAI**, **Google Gemini**, **xAI (Grok)**. (Anthropic is
-intentionally out of scope for this project.)
+polycode is **table-driven**. The agent loop never sees a vendor SDK. Add a row to
+the catalog (`packages/providers/src/catalog.ts`); do not grow `makeProvider` with
+one-off switch cases.
 
-All three are reached through one adapter over the Vercel AI SDK
-(`@ai-sdk/openai`, `@ai-sdk/google`, `@ai-sdk/xai`), behind the canonical `Provider`
-interface in `@polycode/core`.
+Pinned **2026-08-31**. IDs churn — `poly --models` prints the checked-in catalog.
 
-## Current model IDs (confirmed June 2026)
+## Built-in providers
 
-> Model IDs churn. These were verified against provider docs in June 2026 — re-check before
-> relying on them long-term.
+| id | Kind | Default strong | Key | Base URL |
+|---|---|---|---|---|
+| `openai` | native OpenAI SDK | `gpt-5.5` | `OPENAI_API_KEY` | SDK default |
+| `google` | native Google SDK | `gemini-3.1-pro` | `GOOGLE_GENERATIVE_AI_API_KEY` (alias `GEMINI_API_KEY`) | SDK default |
+| `xai` | native xAI SDK | `grok-4.3` | `XAI_API_KEY` | SDK default |
+| `muse` | OpenAI-compat | `muse-spark-1.2` | `MUSE_API_KEY` (alias `MODEL_API_KEY`) | `https://api.meta.ai/v1` (`MUSE_BASE_URL`) |
+| `nvidia` | OpenAI-compat | `nvidia/nemotron-3-super-120b-a12b` | `NVIDIA_API_KEY` | `https://integrate.api.nvidia.com/v1` (`NVIDIA_BASE_URL`) |
+| `qwen` | OpenAI-compat | `qwen3.8-max` | `DASHSCOPE_API_KEY` (alias `QWEN_API_KEY`) | DashScope intl (`QWEN_BASE_URL`) |
+| `anthropic` | native Anthropic SDK | `claude-sonnet-4-5` | `ANTHROPIC_API_KEY` | SDK default |
 
-| Provider | Good defaults | Cheaper / other | Newer |
-|---|---|---|---|
-| OpenAI | `gpt-5.5` (flagship) | `gpt-5.4-mini`, `gpt-5.4-nano` | — |
-| Google | `gemini-2.5-flash`, `gemini-2.5-pro` | `gemini-2.5-flash-lite` | `gemini-3.5-flash`, `gemini-3.1-pro` |
-| xAI | `grok-4.3` | `grok-code-fast-1` | — |
+`/model` is always `provider:model`. Slash-containing NVIDIA ids work:
+`nvidia:nvidia/nemotron-3-nano-30b-a3b`.
 
-Notes:
-- OpenAI's `gpt-5` is superseded by the 5.4/5.5 line.
-- xAI's `grok-4` is retired (requests redirect to `grok-4.3`).
-- Gemini `gemini-2.5-flash` is a safe, cheap smoke-test target.
+List the catalog:
 
-## Selecting a model
+```powershell
+corepack pnpm -C <repo> exec poly --models
+# or from the CLI once built:  poly --models
+```
 
-- Per session: `--model openai:gpt-5.5`
-- At runtime in the TUI: `/model google:gemini-2.5-pro`
-- Per tier: edit `tiers` in `polycode.config.json` (see [Configuration](configuration.md))
+In the TUI: `/model muse:muse-spark-1.2`.
 
-The format is always `provider:model`, where provider is `openai`, `google`, or `xai`.
+## Two adapter kinds (only)
 
-## Capabilities
+1. **OpenAI-compat** — `createOpenAI({ apiKey, baseURL })` wrapping the existing
+   AI SDK adapter. Muse, NVIDIA NIM, Qwen, and `providers.custom` all use this.
+2. **Native SDK** — `@ai-sdk/openai`, `@ai-sdk/google`, `@ai-sdk/xai`, `@ai-sdk/anthropic`.
 
-Each provider reports a `Capabilities` object (context window, max output, tool/reasoning/
-caching/vision/parallel flags) consumed by the loop. The numbers in
-`packages/providers/src/index.ts` are estimates — confirm against provider docs and adjust.
+Anthropic uses the Messages API. Do not point Claude at an OpenAI base URL.
+
+## Training-tier / Contributor policy
+
+Models whose id contains `contributor` (e.g. `muse-spark-1.2-contributor`) **train
+the vendor on prompts and completions**, including tool results. They are **refused
+by default**.
+
+```json
+{
+  "allowTrainingTiers": false,
+  "providers": { "allow": ["openai", "google", "anthropic", "nvidia"] }
+}
+```
+
+Set `allowTrainingTiers: true` only with an explicit legal opt-in. Company profile
+should leave it false.
+
+## On-prem NVIDIA NIM
+
+Same provider id, different URL:
+
+```powershell
+$env:NVIDIA_BASE_URL = "http://127.0.0.1:8000/v1"
+poly --model nvidia:meta/llama-3.3-70b-instruct
+```
+
+Llama/Qwen *hosted by NIM* stay `nvidia:<vendor>/<model>`. Direct DashScope/Muse
+remain separate providers for keys that are not NIM.
+
+## Custom OpenAI-compat (no code change)
+
+```json
+{
+  "providers": {
+    "custom": [{
+      "id": "local-nim",
+      "baseURL": "http://127.0.0.1:8000/v1",
+      "envKey": "NVIDIA_API_KEY",
+      "models": ["meta/llama-3.3-70b-instruct"]
+    }]
+  }
+}
+```
+
+Then `/model local-nim:meta/llama-3.3-70b-instruct`.
 
 ## Reasoning effort
 
-The canonical `reasoningEffort` knob (`low` | `medium` | `high`) maps per provider in the
-adapter:
+Canonical `low | medium | high` maps in the adapter:
 
-- OpenAI → `providerOptions.openai.reasoningEffort`
+- OpenAI / Muse / Qwen → `providerOptions.openai.reasoningEffort`
 - xAI → `providerOptions.xai.reasoningEffort`
 - Gemini → `providerOptions.google.thinkingConfig`
+- Anthropic → `providerOptions.anthropic.thinking`
 
-## Adding a new provider
+Muse Spark always reasons; do not send `"none"`.
 
-1. Add the AI SDK provider package (e.g. `@ai-sdk/<x>`) to `@polycode/providers`.
-2. In `packages/providers/src/index.ts`: extend `ProviderId`, add a `Capabilities` const,
-   add a `case` in `makeProvider`, and accept it in `parseModelArg`.
-3. Add it to `PROVIDERS` / `ENV_VAR` / labels in `@polycode/secrets` so the setup screen
-   and key store know about it.
-4. If it has a non-standard reasoning param, extend `reasoningOptions()` in the adapter.
+## Adding a provider
 
-No changes to the agent loop, tools, router, or UI are required.
+OpenAI-compat (Groq, Together, vLLM): add a `providers.custom` row. No PR required.
 
-> **AI SDK version note:** the adapter's `fullStream` part field names (`text-delta`,
-> `reasoning-delta`, `tool-call`, `finish`) track AI SDK v5. Re-verify on a major SDK bump.
+First-class id (settings screen + catalog):
+
+1. Add a `CatalogEntry` in `packages/providers/src/catalog.ts`.
+2. If it is not OpenAI-compat, add one `kind` arm in `makeProvider` and an `@ai-sdk/*` dep.
+3. Add the id to `@polycode/secrets` (`PROVIDERS`, `ENV_VAR`, label, key URL).
+4. Extend `reasoningOptions()` if the vendor has a thinking knob.
+
+No changes to the agent loop, tools, or TUI renderer.

@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, "package.json"), "utf8"));
 
-// Externalize the CLI's declared third-party deps (installed from npm at runtime);
+// Externalize the CLI's declared third-party deps (installed from the lockfile);
 // internal @polycode/* packages are devDependencies and get bundled in.
 const external = [
   ...Object.keys(pkg.dependencies ?? {}),

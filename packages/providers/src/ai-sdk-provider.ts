@@ -102,16 +102,25 @@ function toAiTools(tools: ToolSpec[]): ToolSet {
   return out;
 }
 
-function toModelMessages(req: GenerateRequest): ModelMessage[] {
+export function toModelMessages(req: GenerateRequest): ModelMessage[] {
   const out: ModelMessage[] = [];
   for (const m of req.messages) {
     if (m.role === "user") {
-      out.push({
-        role: "user",
-        content: m.content
-          .filter((p) => p.type === "text")
-          .map((p) => ({ type: "text", text: (p as any).text })),
-      });
+      const content: Array<
+        { type: "text"; text: string } | { type: "image"; image: Buffer; mediaType?: string }
+      > = [];
+      for (const p of m.content) {
+        if (p.type === "text") content.push({ type: "text", text: p.text });
+        else if (p.type === "image") {
+          content.push({
+            type: "image",
+            image: Buffer.from(p.data, "base64"),
+            mediaType: p.mediaType,
+          });
+        }
+      }
+      if (!content.length) content.push({ type: "text", text: "" });
+      out.push({ role: "user", content });
     } else if (m.role === "assistant") {
       const content: any[] = [];
       for (const p of m.content) {
@@ -164,8 +173,12 @@ function reasoningOptions(
   effort?: "low" | "medium" | "high",
 ): Record<string, any> | undefined {
   if (!effort) return undefined;
-  if (id === "openai") return { openai: { reasoningEffort: effort } };
+  if (id === "openai" || id === "muse") return { openai: { reasoningEffort: effort } };
   if (id === "xai") return { xai: { reasoningEffort: effort } };
   if (id === "google") return { google: { thinkingConfig: { includeThoughts: true } } };
+  if (id === "anthropic") {
+    return { anthropic: { thinking: { type: "enabled", budgetTokens: effort === "high" ? 10_000 : 4_000 } } };
+  }
+  if (id === "qwen") return { openai: { reasoningEffort: effort } };
   return undefined;
 }

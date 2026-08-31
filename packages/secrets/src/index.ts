@@ -3,26 +3,60 @@ import { mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export type ProviderId = "openai" | "google" | "xai";
+export type ProviderId =
+  | "openai"
+  | "google"
+  | "xai"
+  | "muse"
+  | "nvidia"
+  | "qwen"
+  | "anthropic";
 
-export const PROVIDERS: ProviderId[] = ["openai", "google", "xai"];
+export const PROVIDERS: ProviderId[] = [
+  "openai",
+  "google",
+  "xai",
+  "muse",
+  "nvidia",
+  "qwen",
+  "anthropic",
+];
 
 export const ENV_VAR: Record<ProviderId, string> = {
   openai: "OPENAI_API_KEY",
   google: "GOOGLE_GENERATIVE_AI_API_KEY",
   xai: "XAI_API_KEY",
+  muse: "MUSE_API_KEY",
+  nvidia: "NVIDIA_API_KEY",
+  qwen: "DASHSCOPE_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+};
+
+/** Extra env names accepted when reading (hydrate copies them onto ENV_VAR). */
+export const ENV_ALIASES: Partial<Record<ProviderId, string[]>> = {
+  google: ["GEMINI_API_KEY"],
+  muse: ["MODEL_API_KEY"],
+  qwen: ["QWEN_API_KEY"],
 };
 
 const LABELS: Record<ProviderId, string> = {
   openai: "OpenAI",
   google: "Google Gemini",
   xai: "xAI (Grok)",
+  muse: "Meta Muse",
+  nvidia: "NVIDIA NIM",
+  qwen: "Qwen (DashScope)",
+  anthropic: "Anthropic",
 };
 
 const KEY_URLS: Record<ProviderId, string> = {
   openai: "https://platform.openai.com/api-keys",
   google: "https://aistudio.google.com/app/apikey",
   xai: "https://console.x.ai/",
+  muse: "https://ai.developer.meta.com/",
+  nvidia: "https://build.nvidia.com/",
+  qwen: "https://modelstudio.console.alibabacloud.com/",
+  anthropic: "https://console.anthropic.com/settings/keys",
 };
 
 export function label(p: ProviderId): string {
@@ -83,9 +117,19 @@ function writeFileStore(store: Partial<Record<ProviderId, string>>): void {
 
 // ---- Public API -----------------------------------------------------------
 
-/** Resolution order: process env (incl. .env) → OS keychain → file store. */
+function envLookup(p: ProviderId): string | undefined {
+  const primary = process.env[ENV_VAR[p]];
+  if (primary) return primary;
+  for (const a of ENV_ALIASES[p] ?? []) {
+    const v = process.env[a];
+    if (v) return v;
+  }
+  return undefined;
+}
+
+/** Resolution order: process env (incl. aliases / .env) → OS keychain → file store. */
 export function getKey(p: ProviderId): string | undefined {
-  const env = process.env[ENV_VAR[p]];
+  const env = envLookup(p);
   if (env) return env;
 
   if (KeyringEntry) {
@@ -136,7 +180,7 @@ export type KeySource = "env" | "keychain" | "file" | "none";
 
 /** Where the active key for a provider is coming from (mirrors getKey order). */
 export function keySource(p: ProviderId): KeySource {
-  if (process.env[ENV_VAR[p]]) return "env";
+  if (envLookup(p)) return "env";
   if (KeyringEntry) {
     try {
       if (new KeyringEntry(SERVICE, p).getPassword()) return "keychain";
@@ -155,7 +199,7 @@ export function keySource(p: ProviderId): KeySource {
 export function importFromEnv(): ProviderId[] {
   const imported: ProviderId[] = [];
   for (const p of PROVIDERS) {
-    const v = process.env[ENV_VAR[p]];
+    const v = envLookup(p);
     if (v) {
       setKey(p, v);
       imported.push(p);

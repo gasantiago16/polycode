@@ -42,7 +42,8 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html" class="active">Continuity / Handoff</a></nav>
+<a href="continuity.html" class="active">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Continuity / Handoff</h1>
 <p>A single place to pick the project back up — current state, decisions, gotchas, and what&#39;s next.</p>
@@ -55,7 +56,7 @@ provider-blind agent engine.</p>
 <ul>
 <li>✅ Monorepo scaffolded; <strong>typechecks clean</strong>.</li>
 <li>✅ Canonical core (types, permission engine, agent loop).</li>
-<li>✅ Providers via AI SDK adapter: OpenAI + Gemini + xAI.</li>
+<li>✅ Providers via AI SDK adapter: OpenAI + Gemini + xAI + Muse + NVIDIA NIM + Qwen + Anthropic (catalog, 2026-08-31).</li>
 <li>✅ Smart routing: heuristic <strong>and</strong> model-driven classifiers (<code>--routing model</code>),
 with heuristic fallback; per-turn auto-routing in the TUI (<code>/route</code>).</li>
 <li>✅ Tools: read/write/edit/bash/grep/glob with permission classes.</li>
@@ -66,11 +67,11 @@ with a test call · agentic hook (stub; MCP flow TODO).</li>
 <li>✅ <strong>Secure key flow</strong>: masked first-run setup → OS keychain (DPAPI-backed on Windows),
 <code>0600</code> file fallback. Keychain backend <strong>verified active</strong>.</li>
 <li>✅ Tool-execution sandbox: <code>local</code> (host) + <code>docker</code> (isolated shell) backends; tools
-run only through the <code>Sandbox</code> contract; <code>--sandbox docker</code> with graceful fallback.</li>
+run only through the <code>Sandbox</code> contract; <code>--sandbox docker</code> <strong>fails closed</strong>.</li>
 <li>✅ Hosted server: <code>POST /chat</code> (SSE) + <code>/health</code> (takes a <code>Sandbox</code>).</li>
 <li>✅ Live smoke harness (<code>pnpm smoke &lt;provider:model&gt;</code>).</li>
 <li>✅ Build &amp; distribute: <code>tsup</code> bundles the CLI to a single <code>poly</code> bin (internal packages
-bundled, third-party external); publishable <code>@polycode/cli</code>; multi-stage server <code>Dockerfile</code>.</li>
+bundled, third-party external); private <code>@polycode/cli</code> (not npmjs); multi-stage server <code>Dockerfile</code>.</li>
 <li>✅ Docs in Markdown + generated HTML (<code>docs/</code>, <code>docs/html/</code>).</li>
 <li>✅ <strong>Live end-to-end provider call verified</strong> (2026-06-23) — <code>pnpm smoke xai:grok-4.3</code>
 round-trip green (tool call → numbered result → text).</li>
@@ -81,11 +82,12 @@ loop hardening (<code>maxSteps</code> cap + transient-error retry), and a <code>
 <h2>Key decisions (and why)</h2>
 <ol>
 <li><strong>TypeScript + Ink + Vercel AI SDK</strong> — closest to the Claude Code look; best multi-model
-SDK; npm distribution.</li>
+SDK; ship via git + Docker, not npmjs.</li>
 <li><strong>Unifying SDK behind our own <code>Provider</code> interface</strong> — fast to build, not locked in; can
 drop a hand-rolled adapter per provider where the SDK flattens something we need.</li>
-<li><strong>Anthropic intentionally excluded</strong> — providers are OpenAI / Gemini / xAI only. Do not
-add <code>@ai-sdk/anthropic</code> or <code>claude-*</code> models.</li>
+<li><strong>Anthropic is first-class</strong> (reversed 2026-08-31) — <code>@ai-sdk/anthropic</code> plus
+OpenAI-compat rows for Muse / NVIDIA NIM / Qwen. Contributor / training-tier
+model ids are refused unless <code>allowTrainingTiers: true</code>.</li>
 <li><strong>Provider-blind core</strong> — loop/tools/permissions/UI see only canonical types; the seam
 that makes multi-model work.</li>
 <li><strong>Engine reused local + hosted</strong> — <code>core</code> is transport-agnostic; TUI imports it, server
@@ -103,6 +105,10 @@ wraps it.</li>
 <li><strong>Capability numbers are estimates</strong> in <code>packages/providers/src/index.ts</code>.</li>
 <li><strong>Dev resolution.</strong> Packages point <code>main</code>/<code>exports</code> at <code>src/index.ts</code> for <code>tsx</code>. For
 publishing, switch to <code>dist</code> and run <code>build</code>.</li>
+<li><strong>TUI flicker.</strong> Streaming text is paint-buffered (~10 Hz). Open markdown fences
+render without a round border so the live region does not reflow every token.
+Frame-count tests live in <code>packages/tui/src/app.ux.test.ts</code>. Still run the TUI once
+in a real Windows Terminal (120×40) before merging TUI-touching PRs.</li>
 </ul>
 <h2>Repo</h2>
 <ul>
@@ -116,11 +122,9 @@ is done; Phases 2–4 (tools / TUI / persistence) are queued.</p>
 </blockquote>
 <ol>
 <li><strong>Run the live smoke test</strong> — paste a key via the setup screen, then
-<code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>. Also <code>route-check</code> the classifier,
-and try <code>--sandbox docker</code> once Docker is available.</li>
-<li><strong>Harden hosted mode</strong> — per-request auth + per-session permission policy on top of the
-docker sandbox; rate limiting + audit logging before exposing the server. Build/push the
-Docker image (the <code>Dockerfile</code> exists but hasn&#39;t been image-built from CI yet).</li>
+<code>corepack pnpm smoke &lt;provider:model&gt;</code>; confirm <code>PASS</code>. Also <code>route-check</code> the classifier.
+<code>--sandbox docker</code> fails closed if Docker is not running.</li>
+<li><strong>Build/push the Docker image</strong> — the <code>Dockerfile</code> exists but hasn&#39;t been image-built from CI yet.</li>
 <li><strong>Parallel-safe tool batching</strong> — run <code>parallelSafe</code> tools concurrently in the loop.</li>
 <li><strong>Tune the classifier</strong> — few-shot examples / structured output; cache across sessions.</li>
 <li><strong>Wire agentic key provisioning</strong> — the Settings <code>a</code> hook is a stub; connect a real MCP/tool flow.</li>

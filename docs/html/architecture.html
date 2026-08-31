@@ -42,7 +42,8 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Architecture</h1>
 <h2>Layers</h2>
@@ -134,9 +135,49 @@ loops until <code>stop_reason</code> is <code>end_turn</code>.</p>
 </code></pre>
 <p>This keeps gating, rendering, and (later) parallel scheduling under our control rather than
 the SDK&#39;s.</p>
+<p>Before each <code>provider.stream</code>, the loop estimates tokens (<code>chars/4</code>) and, at 85% of
+<code>capabilities().contextWindow</code>, runs two-pass compaction: elide old <code>tool_result</code> bodies,
+then (if still over) summarize older turns with the cheap-tier provider into one
+<code>&lt;compacted-history&gt;</code> message. The original task and the last N turns stay verbatim.
+A failed shrink sticky-suppresses auto-compact until a successful one. <code>/compact [focus]</code>
+and <code>/context</code> are the manual surface. Compaction is provider-local — it does not call
+xAI&#39;s Compaction API — so Muse/OpenAI/Gemini get the same behavior.</p>
+<p><code>web_fetch</code> and <code>web_search</code> run in the <strong>host</strong> process (SSRF-blocked: no file://,
+localhost, RFC1918, link-local). Search uses <code>TAVILY_API_KEY</code> or <code>BRAVE_API_KEY</code>.
+Docker bash stays <code>--network none</code>. Skills load from <code>.polycode/skills</code>,
+<code>~/.config/polycode/skills</code>, then bundled (<code>forme</code>, <code>matsumura-style</code>, <code>deep-research</code>).
+<code>/deep-research</code> fans out three <code>researcher</code> children (web tools, no <code>task</code>) then
+writes <code>docs/research/&lt;slug&gt;.md</code>. Mutating tools snapshot the prior file; <code>/rewind</code>
+restores it and truncates history. Permission allow/deny patterns run before the
+mode prompt. <code>@file.ts</code> mentions expand through the sandbox. MCP servers in
+<code>.polycode/mcp.json</code> become <code>mcp__&lt;server&gt;__&lt;tool&gt;</code> ToolSpecs and use the same
+permission engine (default <code>dangerous</code>). Connect failures are skipped. MCP
+JSON schemas are <strong>deferred</strong> (<code>mcp_search</code> or first call hydrates; <code>/context</code>
+shows the schema budget). The idle TUI status line is a <code>$token</code> template
+(<code>/statusline</code>, <code>statusLine</code> in config).
+User messages may include <code>ImagePart</code>s (<code>/image path</code> or <code>@shot.png</code>). The AI SDK adapter
+sends them as vision <code>image</code> parts. Compaction estimates ~800 tokens each and clones
+them intact in kept turns.</p>
+<p>Curated project memory (<code>.polycode/memory.md</code>) is injected as <code>&lt;memory&gt;</code> by
+<code>gatherContext</code> and updated via the <code>memory</code> tool or <code>/memory add</code>.</p>
+<p><code>task</code> may set <code>isolation: &quot;worktree&quot;</code> for a detached git worktree under
+<code>.polycode/worktrees/</code> (not merged back). <code>/worktree list|apply|remove</code> is the
+manual surface; apply copies changed + untracked files onto the parent tree.
+<code>/deep-research</code> and <code>/workflow &lt;name&gt;</code> run a budgeted TypeScript workflow
+(optional parallel panel, sequential <code>steps</code>, synthesize) from bundled JSON or
+<code>.polycode/workflows/*.json</code>. Lifecycle hooks (<code>PreToolUse</code>, <code>PostToolUse</code>,
+<code>UserPromptSubmit</code>, <code>SessionStart</code>/<code>End</code>, <code>SubagentStart</code>/<code>Stop</code>, <code>Stop</code>) run
+through the sandbox; a nonzero <code>PreToolUse</code> or <code>UserPromptSubmit</code> denies.</p>
+<p>Child loops (<code>task</code>, <code>/explore</code>, <code>/review</code>) construct a fresh <code>Agent</code> with the same
+sandbox and permission engine, a curated toolset that <strong>excludes <code>task</code></strong> (depth 1),
+and their own compaction. Only the child&#39;s final text returns to the parent. Review
+children may write only under <code>.polycode/reviews/</code>.</p>
 <h2>Local vs hosted — one engine</h2>
 <p><code>@polycode/core</code> is transport-agnostic. The Ink TUI imports it directly for local use; the
-<code>@polycode/server</code> package wraps the identical engine behind <code>POST /chat</code> (SSE). Runtime
+<code>@polycode/server</code> package wraps the identical engine behind <code>POST /chat</code> (SSE) with bearer
+auth, rate limits, a no-prompt permission policy, and an IDE bridge (<code>/ide/context</code>
+prepended onto <code>/chat</code>). Plugin bundles under <code>.polycode/plugins/</code> contribute skills,
+agents, hooks, MCP, and LSP configs. Runtime
 <code>/model</code> switching and router-driven selection both work by swapping the <code>Provider</code> the loop
 holds — no other change.</p>
 

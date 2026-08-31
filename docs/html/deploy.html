@@ -42,14 +42,16 @@
 <a href="packages.html">Packages</a>
 <a href="deploy.html" class="active">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
-<a href="continuity.html">Continuity / Handoff</a></nav>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Build &amp; Deploy</h1>
 <h2>Build the CLI bundle</h2>
 <p><code>tsup</code> bundles the CLI into a single self-contained ESM file at
 <code>packages/cli/dist/index.js</code> (with a <code>#!/usr/bin/env node</code> shebang). Internal
 <code>@polycode/*</code> packages are bundled in; third-party deps (ai, ink, react, …) stay external
-and ship as the published package&#39;s <code>dependencies</code>.</p>
+and are installed from the lockfile for local/Docker runs. This repo is <strong>not</strong> published
+to npmjs.com.</p>
 <pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\Gabriel Santiago\polycode&quot; build
 # → packages/cli/dist/index.js
 </code></pre>
@@ -61,36 +63,28 @@ node packages/cli/dist/index.js --serve    # server mode
 corepack pnpm -C packages/cli link --global
 poly                                        # then just run `poly`
 </code></pre>
-<h2>Publish (manual — your step)</h2>
-<p><code>@polycode/cli</code> is configured to publish (<code>bin: poly</code>, <code>files: [&quot;dist&quot;]</code>,
-<code>prepublishOnly</code> builds). Publishing is an outward action under your own npm account/scope:</p>
-<pre><code class="language-powershell">cd packages/cli
-npm version &lt;patch|minor|major&gt;
-npm publish --access public      # choose your scope/visibility
+<h2>Distribute (not npmjs)</h2>
+<p>Do not <code>npm publish</code>. The CLI package is <code>private</code>. Ship the local bundle or the Docker image.</p>
+<pre><code class="language-powershell">corepack pnpm build
+node packages/cli/dist/index.js
+# or: corepack pnpm -C packages/cli link --global  →  poly
 </code></pre>
-<p>Internal <code>@polycode/*</code> packages are <code>private</code> and stay unpublished — they&#39;re bundled into
-the CLI, so consumers only install the third-party runtime deps.</p>
 <h2>Server Docker image</h2>
-<p>The repo root has a multi-stage <code>Dockerfile</code> that builds the bundle and runs it in <code>--serve</code>
-mode.</p>
+<p>Multi-stage <code>Dockerfile</code>: builds the CLI bundle, runs as <code>USER node</code>, listens on <code>0.0.0.0:8787</code>,
+and HEALTHCHECKs <code>/health</code>. Mount the project at <code>/work</code>.</p>
 <pre><code class="language-powershell">docker build -t polycode-server .
-docker run --rm -p 8787:8787 -e OPENAI_API_KEY=sk-... polycode-server
-# POST http://localhost:8787/chat  {&quot;message&quot;:&quot;...&quot;}   (SSE)
+docker run --rm -p 8787:8787 `
+  -e POLYCODE_AUTH_TOKEN=change-me-now-16 `
+  -e OPENAI_API_KEY=sk-... `
+  -v ${PWD}:/work `
+  polycode-server
+# POST http://localhost:8787/chat  Authorization: Bearer change-me-now-16  {&quot;message&quot;:&quot;...&quot;}
 # GET  http://localhost:8787/health
 </code></pre>
-<p>Pass provider keys via env (<code>OPENAI_API_KEY</code> / <code>GOOGLE_GENERATIVE_AI_API_KEY</code> /
-<code>XAI_API_KEY</code>). Routing strategy + sandbox come from <code>polycode.config.json</code> (bake it into the
-image or mount it).</p>
-<blockquote>
-<p><strong>Isolation note:</strong> inside the container, tools use the default <code>local</code> sandbox — the
-container itself is the boundary. For untrusted multi-tenant use, front the server with an
-orchestrator that spawns one container per session, and add auth + rate limiting (see
-<a href="security.html">Security &amp; Keys</a> and <a href="continuity.html">Continuity</a>).</p>
-</blockquote>
-<blockquote>
-<p><strong>Not built in CI yet</strong> — the Dockerfile is provided but hasn&#39;t been image-built/pushed
-from this repo; verify <code>docker build</code> in your environment before relying on it.</p>
-</blockquote>
+<p>Without <code>POLYCODE_AUTH_TOKEN</code> the process exits. Pass <code>--insecure</code> only for local scaffolds.
+Inside the image, tools use the <strong>local</strong> sandbox — the container is the isolation boundary.
+For untrusted multi-tenant use, spawn one container per session. Rate limits and audit JSONL
+are on by default.</p>
 
 <footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
 </main>

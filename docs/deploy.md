@@ -5,7 +5,8 @@
 `tsup` bundles the CLI into a single self-contained ESM file at
 `packages/cli/dist/index.js` (with a `#!/usr/bin/env node` shebang). Internal
 `@polycode/*` packages are bundled in; third-party deps (ai, ink, react, …) stay external
-and ship as the published package's `dependencies`.
+and are installed from the lockfile for local/Docker runs. This repo is **not** published
+to npmjs.com.
 
 ```powershell
 corepack pnpm -C "C:\Users\Gabriel Santiago\polycode" build
@@ -23,40 +24,33 @@ corepack pnpm -C packages/cli link --global
 poly                                        # then just run `poly`
 ```
 
-## Publish (manual — your step)
+## Distribute (not npmjs)
 
-`@polycode/cli` is configured to publish (`bin: poly`, `files: ["dist"]`,
-`prepublishOnly` builds). Publishing is an outward action under your own npm account/scope:
+Do not `npm publish`. The CLI package is `private`. Ship the local bundle or the Docker image.
 
 ```powershell
-cd packages/cli
-npm version <patch|minor|major>
-npm publish --access public      # choose your scope/visibility
+corepack pnpm build
+node packages/cli/dist/index.js
+# or: corepack pnpm -C packages/cli link --global  →  poly
 ```
-
-Internal `@polycode/*` packages are `private` and stay unpublished — they're bundled into
-the CLI, so consumers only install the third-party runtime deps.
 
 ## Server Docker image
 
-The repo root has a multi-stage `Dockerfile` that builds the bundle and runs it in `--serve`
-mode.
+Multi-stage `Dockerfile`: builds the CLI bundle, runs as `USER node`, listens on `0.0.0.0:8787`,
+and HEALTHCHECKs `/health`. Mount the project at `/work`.
 
 ```powershell
 docker build -t polycode-server .
-docker run --rm -p 8787:8787 -e OPENAI_API_KEY=sk-... polycode-server
-# POST http://localhost:8787/chat  {"message":"..."}   (SSE)
+docker run --rm -p 8787:8787 `
+  -e POLYCODE_AUTH_TOKEN=change-me-now-16 `
+  -e OPENAI_API_KEY=sk-... `
+  -v ${PWD}:/work `
+  polycode-server
+# POST http://localhost:8787/chat  Authorization: Bearer change-me-now-16  {"message":"..."}
 # GET  http://localhost:8787/health
 ```
 
-Pass provider keys via env (`OPENAI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY` /
-`XAI_API_KEY`). Routing strategy + sandbox come from `polycode.config.json` (bake it into the
-image or mount it).
-
-> **Isolation note:** inside the container, tools use the default `local` sandbox — the
-> container itself is the boundary. For untrusted multi-tenant use, front the server with an
-> orchestrator that spawns one container per session, and add auth + rate limiting (see
-> [Security & Keys](security.md) and [Continuity](continuity.md)).
-
-> **Not built in CI yet** — the Dockerfile is provided but hasn't been image-built/pushed
-> from this repo; verify `docker build` in your environment before relying on it.
+Without `POLYCODE_AUTH_TOKEN` the process exits. Pass `--insecure` only for local scaffolds.
+Inside the image, tools use the **local** sandbox — the container is the isolation boundary.
+For untrusted multi-tenant use, spawn one container per session. Rate limits and audit JSONL
+are on by default.

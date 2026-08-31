@@ -1,4 +1,15 @@
-import type { ToolSpec, ToolContext, ToolRunResult, Sandbox } from "@polycode/core";
+import {
+  isProtectedProjectPath,
+  type ToolSpec,
+  type ToolContext,
+  type ToolRunResult,
+  type Sandbox,
+} from "@polycode/core";
+import { task } from "./task.js";
+import { webFetch } from "./web.js";
+import { webSearch } from "./search.js";
+import { todoWrite } from "./todo.js";
+import { memory } from "./memory.js";
 
 const MAX_OUTPUT = 60_000;
 
@@ -216,6 +227,9 @@ const grep: ToolSpec = {
     additionalProperties: false,
   },
   async run(input: GrepInput, ctx: ToolContext) {
+    if (input.path && isProtectedProjectPath(input.path)) {
+      return { output: "path is not accessible", isError: true };
+    }
     if (await hasRipgrep(ctx)) return runRipgrep(input, ctx);
     return runJsGrep(input, ctx);
   },
@@ -448,6 +462,9 @@ async function runRipgrep(input: GrepInput, ctx: ToolContext): Promise<ToolRunRe
   if (input.ignore_case) args.push("-i");
   if (ctxN > 0) args.push("-C", String(ctxN));
   if (input.glob) args.push("-g", input.glob);
+  for (const g of ["!.env", "!.env.*", "!.git/**", "!.ssh/**", "!.polycode/**"]) {
+    args.push("-g", g);
+  }
   args.push("-e", input.pattern);
   // `--` ends options so a path beginning with `-` can't be read as a flag
   // (rg has flags like --pre that execute programs).
@@ -537,5 +554,19 @@ function globToRegExp(pattern: string): RegExp {
   return new RegExp(`^${re}$`);
 }
 
-export const tools: ToolSpec[] = [read, write, edit, multiEdit, bash, grep, ls, glob];
-export { read, write, edit, multiEdit, bash, grep, ls, glob };
+export const tools: ToolSpec[] = [
+  read,
+  write,
+  edit,
+  multiEdit,
+  bash,
+  grep,
+  ls,
+  glob,
+  task,
+  webFetch,
+  webSearch,
+  todoWrite,
+  memory,
+];
+export { read, write, edit, multiEdit, bash, grep, ls, glob, task, webFetch, webSearch, todoWrite, memory };
