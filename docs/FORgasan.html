@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FORgasan — polycode</title>
+  <style>
+    :root {
+      --bg: #0c1014;
+      --fg: #ece6df;
+      --muted: #9a9086;
+      --accent: #d97757;
+      --accent2: #7aa2f7;
+      --ok: #9ece6a;
+      --warn: #e0af68;
+      --danger: #f7768e;
+      --card: #161c22;
+      --card2: #1c242c;
+      --border: #2a333c;
+      --code: #0a0d10;
+      --glow: rgba(217, 119, 87, 0.14);
+      --radius: 12px;
+      --max: 52rem;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(900px 480px at 8% -8%, rgba(217,119,87,.10), transparent 50%),
+        radial-gradient(700px 400px at 100% 0%, rgba(122,162,247,.06), transparent 45%),
+        var(--bg);
+      color: var(--fg);
+      line-height: 1.68;
+    }
+    .wrap { max-width: var(--max); margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+    h1 { font-size: clamp(1.5rem, 4vw, 2rem); margin: 0 0 .35rem; letter-spacing: -.02em; }
+    h2 {
+      font-size: 1.32rem; margin: 2.5rem 0 1rem; padding-bottom: .4rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: .55rem;
+    }
+    h2 .n {
+      width: 1.75rem; height: 1.75rem; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--glow); border: 1px solid rgba(217,119,87,.35);
+      color: var(--accent); font-size: .85rem; font-weight: 700; flex: none;
+    }
+    h3 { font-size: 1.05rem; margin: 1.2rem 0 .4rem; }
+    a { color: var(--accent); }
+    .lede { color: var(--muted); font-size: 1.05rem; }
+    code, pre { font-family: ui-monospace, Consolas, monospace; font-size: .86em; }
+    code { background: var(--code); padding: .12em .35em; border-radius: 4px; }
+    pre {
+      background: var(--code); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1rem; overflow-x: auto; color: #c9d1d9;
+    }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .93rem; }
+    th, td { border: 1px solid var(--border); padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: var(--card2); color: var(--accent); }
+    .hero {
+      position: relative; border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--border); margin-bottom: 1.25rem; background: var(--card);
+      min-height: 220px;
+    }
+    .hero-img { display: block; width: 100%; max-height: 280px; object-fit: cover; }
+    .hero-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(12,16,20,.96), rgba(12,16,20,.15) 55%);
+      display: flex; flex-direction: column; justify-content: flex-end;
+      padding: 1.35rem;
+    }
+    .badge {
+      display: inline-block; font-size: .72rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .04em;
+      padding: .2rem .55rem; border-radius: 999px;
+      border: 1px solid var(--border); color: var(--accent);
+      background: rgba(15,20,28,.75); margin: 0 .3rem .4rem 0;
+    }
+    nav.toc {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.15rem; margin: 1.25rem 0;
+    }
+    nav.toc ol { margin: .5rem 0 0; padding-left: 1.2rem; }
+    @media (min-width: 640px) { nav.toc ol { columns: 2; } }
+    .figure {
+      margin: 1.1rem 0; border-radius: var(--radius); overflow: hidden;
+      border: 1px solid var(--border); background: var(--card);
+    }
+    .figure img { display: block; width: 100%; max-height: 320px; object-fit: cover; }
+    .figure figcaption {
+      padding: .65rem .9rem; font-size: .88rem; color: var(--muted);
+      border-top: 1px solid var(--border); background: var(--card2);
+    }
+    .stat-row {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(7.2rem, 1fr));
+      gap: .65rem; margin: 1rem 0;
+    }
+    .stat {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: .75rem; text-align: center;
+    }
+    .stat .v { display: block; font-size: 1.25rem; font-weight: 700; color: var(--ok); }
+    .stat .l { display: block; font-size: .7rem; color: var(--muted); text-transform: uppercase; margin-top: .2rem; letter-spacing: .04em; }
+    .card-grid { display: grid; gap: .75rem; margin: 1rem 0; grid-template-columns: 1fr; }
+    @media (min-width: 560px) {
+      .card-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+      .card-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    .vcard {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .9rem 1rem; position: relative;
+    }
+    .vcard::before {
+      content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+    }
+    .vcard h4 { margin: .2rem 0 .35rem; }
+    .vcard .tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .vcard p { margin: .25rem 0 0; font-size: .9rem; color: var(--muted); }
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: linear-gradient(90deg, var(--glow), var(--card));
+      padding: .85rem 1rem; margin: 1rem 0; border-radius: 0 10px 10px 0;
+    }
+    .callout.law { border-left-color: var(--ok); }
+    .callout.warn { border-left-color: var(--warn); }
+    .diagram {
+      margin: 1rem 0; background: var(--code); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .75rem; overflow-x: auto;
+    }
+    .diagram svg { display: block; width: 100%; max-width: 640px; margin: 0 auto; height: auto; }
+    .diagram-caption { text-align: center; font-size: .82rem; color: var(--muted); margin-top: .45rem; }
+    .flow-step { display: grid; grid-template-columns: 2rem 1fr; gap: .65rem; margin-bottom: .55rem; }
+    .flow-dot {
+      width: 2rem; height: 2rem; border-radius: 50%;
+      border: 2px solid var(--accent); color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 700; background: var(--card2);
+    }
+    .flow-body {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: .7rem .9rem; font-size: .94rem;
+    }
+    .scar {
+      background: var(--card); border: 1px solid var(--border);
+      border-left: 4px solid var(--warn); border-radius: 0 12px 12px 0;
+      padding: .95rem 1.05rem; margin: 1rem 0;
+    }
+    .scar h3 { margin: 0 0 .55rem; color: var(--warn); font-size: 1.02rem; }
+    .meta { display: grid; grid-template-columns: 4.4rem 1fr; gap: .45rem .6rem; font-size: .9rem; margin: .35rem 0; }
+    .meta .k { font-size: .68rem; font-weight: 700; text-transform: uppercase; color: var(--muted); padding-top: .15rem; }
+    .meta .k.fix { color: var(--ok); }
+    .meta .k.lesson { color: var(--accent2); }
+    .pitfall {
+      background: var(--card); border: 1px solid var(--border);
+      border-left: 4px solid var(--danger); border-radius: 0 10px 10px 0;
+      padding: .7rem .95rem; margin: .55rem 0; font-size: .92rem;
+    }
+    .pitfall strong { color: var(--danger); }
+    .habit-grid { display: grid; gap: .6rem; margin: 1rem 0; }
+    @media (min-width: 560px) { .habit-grid { grid-template-columns: 1fr 1fr; } }
+    .habit {
+      background: var(--card); border: 1px solid var(--border);
+      border-top: 3px solid var(--ok); border-radius: 10px; padding: .75rem .9rem;
+    }
+    .habit strong { display: block; margin-bottom: .2rem; }
+    .habit span { font-size: .88rem; color: var(--muted); }
+    .next {
+      counter-reset: n; display: grid; gap: .55rem; margin: 1rem 0;
+    }
+    .next li {
+      list-style: none; background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: .75rem .95rem .75rem 3rem; position: relative;
+    }
+    .next { padding-left: 0; }
+    .next li::before {
+      counter-increment: n; content: counter(n);
+      position: absolute; left: .7rem; top: .7rem;
+      width: 1.6rem; height: 1.6rem; border-radius: 8px;
+      background: var(--glow); color: var(--accent); font-weight: 700;
+      display: flex; align-items: center; justify-content: center; font-size: .85rem;
+    }
+    footer {
+      margin-top: 3rem; color: var(--muted); font-size: .85rem;
+      border-top: 1px solid var(--border); padding-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <img class="hero-img" src="forme/hero.jpg" alt="Dark control room lit by a single warm coral glow on black consoles" />
+      <div class="hero-overlay">
+        <div>
+          <span class="badge">FORME</span>
+          <span class="badge">polycode</span>
+          <span class="badge">0.1.0-alpha</span>
+        </div>
+        <h1>FORgasan — polycode</h1>
+        <p class="lede" style="color:#ddd6ce;margin:0">A terminal coding agent with one loop and many models. Not LangGraph. Not a website.</p>
+      </div>
+    </header>
+    <p class="diagram-caption" style="text-align:left;margin-top:-.6rem">The product is a console, not a cloud: local TTY, your keys, your repo.</p>
+
+    <p class="lede">You asked for a handle on what we built. Same loop for Grok, Gemini, OpenAI, Muse, NIM, Qwen, Anthropic. Canonical types in the basement. Children one layer deep. Persistence as JSON on disk. A LangGraph-<em>shaped</em> graph we wrote ourselves.</p>
+
+    <div class="stat-row">
+      <div class="stat"><span class="v">307</span><span class="l">unit tests</span></div>
+      <div class="stat"><span class="v">15</span><span class="l">packages</span></div>
+      <div class="stat"><span class="v">#9</span><span class="l">latest PR</span></div>
+      <div class="stat"><span class="v">depth 1</span><span class="l">children</span></div>
+      <div class="stat"><span class="v">4/5</span><span class="l">Jared overall</span></div>
+    </div>
+
+    <div class="callout law"><strong>Hard law:</strong> the loop, tools, TUI, and graph never see a vendor message shape. Adapters translate. If <code>core</code> imports an SDK, multi-model is theater.</div>
+
+    <nav class="toc" aria-label="Contents">
+      <strong>Contents</strong>
+      <ol>
+        <li><a href="#what">What this is</a></li>
+        <li><a href="#map">Map of the code</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#tech">Technologies</a></li>
+        <li><a href="#talk">How parts talk</a></li>
+        <li><a href="#scars">Bugs and scars</a></li>
+        <li><a href="#pitfalls">Pitfalls</a></li>
+        <li><a href="#good">Good engineers</a></li>
+        <li><a href="#lessons">Lessons to steal</a></li>
+        <li><a href="#next">Where next</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="what">
+        <h2><span class="n">1</span> What this project is</h2>
+        <p>A coding assistant in the terminal. <code>corepack pnpm dev</code> in a repo. It reads the project, runs tools, asks before dangerous work, and can spawn <strong>one layer</strong> of child agents. Sessions persist as JSON. Keys sit in the OS keychain. Hosted HTTP is a scaffold — local TUI is the real product.</p>
+        <div class="card-grid cols-3">
+          <div class="vcard"><span class="tag">Product</span><h4>Local TUI</h4><p>Ink composer, slash commands, dashboard, Ctrl+B. Not a website.</p></div>
+          <div class="vcard"><span class="tag">Engine</span><h4>ReAct loop</h4><p>Stream → tools → permission → sandbox → repeat until end_turn.</p></div>
+          <div class="vcard"><span class="tag">Constraint</span><h4>BYOK</h4><p>No Grok Build cloud. Training-tier models never default.</p></div>
+        </div>
+        <p>Private repo <code>gasantiago16/polycode</code>. Experimental local alpha. Node 20/22. It is not LangChain, not LangGraph, not a multi-tenant host.</p>
+      </section>
+
+      <section id="map">
+        <h2><span class="n">2</span> The map of the code</h2>
+        <p>A building with a locked basement. The basement is <code>@polycode/core</code>: canonical messages, the agent loop, permissions, compaction, SSRF, redaction, child spawn. Nothing in <code>core</code> imports a provider SDK.</p>
+        <figure class="figure">
+          <img src="forme/layers.jpg" alt="Stacked translucent plates in a dark void, coral light from below" />
+          <figcaption>Packages are floors. Core is the plate everything else stands on. If a vendor SDK leaks into that plate, the stack is a costume.</figcaption>
+        </figure>
+        <div class="card-grid cols-2">
+          <div class="vcard"><span class="tag">Tools / jail</span><h4>tools + sandbox</h4><p>ToolSpecs never touch Node fs. Local jail or docker fail-closed. Worktrees under <code>.polycode/worktrees/</code>.</p></div>
+          <div class="vcard"><span class="tag">Models</span><h4>providers + router</h4><p>The only AI-SDK-aware code. cheap / strong / long per turn.</p></div>
+          <div class="vcard"><span class="tag">Skin</span><h4>tui + cli + server</h4><p>Same Agent. Ink locally, SSE if you insist on HTTP.</p></div>
+          <div class="vcard"><span class="tag">Fan-out</span><h4>workflows + graph</h4><p>Budgeted /team jobs, then a real state machine with file checkpoints.</p></div>
+        </div>
+        <p><code>docs/</code> is the handbook. Gitignored <code>.polycode/</code> is the runtime house: sessions, worktrees, graph-runs, beta-logs, memory.</p>
+      </section>
+
+      <section id="architecture">
+        <h2><span class="n">3</span> Architecture</h2>
+        <div class="diagram">
+          <svg viewBox="0 0 640 280" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="polycode layers from TUI to provider">
+            <rect width="640" height="280" fill="#0a0d10"/>
+            <rect x="24" y="16" width="592" height="36" rx="8" fill="#1c242c" stroke="#d97757"/>
+            <text x="320" y="39" text-anchor="middle" fill="#ece6df" font-size="13" font-family="Segoe UI,sans-serif">You · Ink TUI · slash · y/a/n · Ctrl+B · dashboard</text>
+            <rect x="24" y="64" width="592" height="44" rx="8" fill="#161c22" stroke="#2a333c"/>
+            <text x="320" y="91" text-anchor="middle" fill="#d97757" font-size="13" font-family="Segoe UI,sans-serif">Agent.run()  stream → tool_call → PermissionEngine → sandbox → loop</text>
+            <rect x="24" y="122" width="184" height="64" rx="8" fill="#161c22" stroke="#7aa2f7"/>
+            <text x="116" y="148" text-anchor="middle" fill="#7aa2f7" font-size="11" font-family="Segoe UI,sans-serif">spawnChild</text>
+            <text x="116" y="166" text-anchor="middle" fill="#9a9086" font-size="10" font-family="Segoe UI,sans-serif">depth 1</text>
+            <rect x="228" y="122" width="184" height="64" rx="8" fill="#161c22" stroke="#7aa2f7"/>
+            <text x="320" y="148" text-anchor="middle" fill="#7aa2f7" font-size="11" font-family="Segoe UI,sans-serif">workflows</text>
+            <text x="320" y="166" text-anchor="middle" fill="#9a9086" font-size="10" font-family="Segoe UI,sans-serif">/team  budget</text>
+            <rect x="432" y="122" width="184" height="64" rx="8" fill="#161c22" stroke="#7aa2f7"/>
+            <text x="524" y="148" text-anchor="middle" fill="#7aa2f7" font-size="11" font-family="Segoe UI,sans-serif">@polycode/graph</text>
+            <text x="524" y="166" text-anchor="middle" fill="#9a9086" font-size="10" font-family="Segoe UI,sans-serif">checkpoint JSON</text>
+            <rect x="24" y="202" width="592" height="56" rx="8" fill="#161c22" stroke="#9ece6a"/>
+            <text x="320" y="226" text-anchor="middle" fill="#9ece6a" font-size="12" font-family="Segoe UI,sans-serif">CanonicalEvent only</text>
+            <text x="320" y="244" text-anchor="middle" fill="#9a9086" font-size="11" font-family="Segoe UI,sans-serif">AI SDK adapter · OpenAI / Gemini / xAI / Muse / NIM / Qwen / Anthropic</text>
+          </svg>
+          <p class="diagram-caption">One loop, three fan-out skins, one adapter. Children never become a second product.</p>
+        </div>
+        <p>One <code>provider.stream()</code> is one model turn. The SDK does not auto-run tools. Compaction at ~85% of the window. Children max depth 1. Graphs checkpoint after each super-step under <code>.polycode/graph-runs/</code>.</p>
+      </section>
+
+      <section id="tech">
+        <h2><span class="n">4</span> Technologies we chose</h2>
+        <table>
+          <thead><tr><th>Choice</th><th>Why</th><th>Tradeoff</th></tr></thead>
+          <tbody>
+            <tr><td>TypeScript + pnpm workspace</td><td>One language TUI → sandbox</td><td>Publish would need dist mains</td></tr>
+            <tr><td>Ink + React 18</td><td>Claude-Code look, Static scrollback</td><td>Windows Terminal is the real test</td></tr>
+            <tr><td>AI SDK behind our Provider</td><td>Fast multi-vendor streams</td><td>Majors rename fullStream parts</td></tr>
+            <tr><td>OS keychain</td><td>DPAPI on Windows</td><td>0600 file fallback</td></tr>
+            <tr><td>Vitest</td><td>Tests next to the bug</td><td>Not a TTY</td></tr>
+            <tr><td><strong>No</strong> LangGraph package</td><td>Keep the canonical seam</td><td>We reimplemented the ideas</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="talk">
+        <h2><span class="n">5</span> How the parts talk</h2>
+        <figure class="figure">
+          <img src="forme/loop.jpg" alt="Circular brass and steel mechanism suggesting a closed feedback loop" />
+          <figcaption>A turn is a closed cycle: stream, gate, execute, observe. Break the cycle (SDK auto-tools) and you lose permissions.</figcaption>
+        </figure>
+        <div class="flow-step"><div class="flow-dot">1</div><div class="flow-body">Submit text. Hooks can block. Optional router picks cheap/strong/long.</div></div>
+        <div class="flow-step"><div class="flow-dot">2</div><div class="flow-body"><code>Agent.run()</code> streams. Text paints ~10 Hz. Tool calls buffered; two writers get worktrees.</div></div>
+        <div class="flow-step"><div class="flow-dot">3</div><div class="flow-body">Deny + protected paths first. Then mode. Then y / <strong>a</strong> session / n.</div></div>
+        <div class="flow-step"><div class="flow-dot">4</div><div class="flow-body">Tools only use <code>ctx.sandbox</code>. Output is redacted. Loop or stop. Session JSON written.</div></div>
+        <div class="flow-step"><div class="flow-dot">G</div><div class="flow-body"><code>/graph research-implement …</code> — each node is a child; each super-step is a checkpoint. Resume the machine, not only the chat.</div></div>
+      </section>
+
+      <section id="scars">
+        <h2><span class="n">6</span> Bugs, scars, and fixes</h2>
+        <p>From cranky reviews and Jared in the chair. He would use it again. Permissions were 2/5 until we fixed the feel.</p>
+        <div class="scar">
+          <h3>Scar 1 — Safe tools skipped the jail</h3>
+          <div class="meta"><span class="k">What</span><span><code>read</code> of <code>.env</code> could auto-allow because “safe” short-circuited the gate.</span></div>
+          <div class="meta"><span class="k fix">Fix</span><span>Deny + protected paths first. Tests for .env and bash that names it.</span></div>
+          <div class="meta"><span class="k lesson">Lesson</span><span>Order of checks is a security feature.</span></div>
+        </div>
+        <div class="scar">
+          <h3>Scar 2 — Project .env as RCE</h3>
+          <div class="meta"><span class="k">What</span><span>Every KEY=VALUE loaded. <code>NODE_OPTIONS</code> / proxy could hijack child node or steal keys.</span></div>
+          <div class="meta"><span class="k fix">Fix</span><span>Allowlist provider keys. Realpath jail. Strip loader names from child env.</span></div>
+          <div class="meta"><span class="k lesson">Lesson</span><span>Untrusted files do not write process.env.</span></div>
+        </div>
+        <div class="scar">
+          <h3>Scar 3 — Background children with no tools</h3>
+          <div class="meta"><span class="k">What</span><span>Silent deny stub. acceptEdits background bash always denied except yolo.</span></div>
+          <div class="meta"><span class="k fix">Fix</span><span>Silent acceptEdits auto-allows mutating+dangerous (still protects paths). Worktrees use forkIsolated.</span></div>
+          <div class="meta"><span class="k lesson">Lesson</span><span>Name the silent policy or the feature is a trap.</span></div>
+        </div>
+        <div class="scar">
+          <h3>Scar 4 — Ctrl+B bomb, dashboard remount, loop overflow</h3>
+          <div class="meta"><span class="k">What</span><span>demoteTurn leaked; peek reset every 400ms; <code>/loop 25d</code> became 1ms.</span></div>
+          <div class="meta"><span class="k fix">Fix</span><span>finally-clear; refresh without remount; 24h cap; monotonic loop ids.</span></div>
+          <div class="meta"><span class="k lesson">Lesson</span><span>Refresh data, don’t remount. Timeouts need a ceiling.</span></div>
+        </div>
+        <div class="scar">
+          <h3>Scar 5 — Jared: permission spam and /hepl</h3>
+          <div class="meta"><span class="k">What</span><span>Grok used bash+wc to count files (no wc on Windows). /hepl was not sent but looked like a crash.</span></div>
+          <div class="meta"><span class="k fix">Fix</span><span>glob returns “N files”. Repeat bash leads with session-always. Copy: not sent · did you mean /help?</span></div>
+          <div class="meta"><span class="k lesson">Lesson</span><span>Testers grade what they see. Hide the noisy tool.</span></div>
+        </div>
+        <div class="scar">
+          <h3>Scar 6 — “We thought it was LangGraph”</h3>
+          <div class="meta"><span class="k">What</span><span>Fan-out looked like a graph. The runtime was ReAct + /team. No checkpointer.</span></div>
+          <div class="meta"><span class="k fix">Fix</span><span><code>@polycode/graph</code> on our loop. PR #9. Honest docs.</span></div>
+          <div class="meta"><span class="k lesson">Lesson</span><span>If you want a state machine, build one. Don’t import a second agent stack.</span></div>
+        </div>
+      </section>
+
+      <section id="pitfalls">
+        <h2><span class="n">7</span> Pitfalls to avoid next time</h2>
+        <div class="pitfall"><strong>Don’t</strong> let vitest crawl <code>.polycode/worktrees/</code> — Jared’s /team cloned the repo into the test run.</div>
+        <div class="pitfall"><strong>Don’t</strong> sync <code>busyRef.current = busy</code> on every render. Own the lock in acquire/release.</div>
+        <div class="pitfall"><strong>Don’t</strong> share one PermissionEngine across parallel children. Prompts hang.</div>
+        <div class="pitfall"><strong>Don’t</strong> follow .env or persona symlinks. realpath must stay in-bounds.</div>
+        <div class="pitfall"><strong>Don’t</strong> use <code>key={tick}</code> to live-update an overlay.</div>
+        <div class="pitfall"><strong>Don’t</strong> pass a live abort signal into waitChild when timeout is 0.</div>
+        <div class="pitfall"><strong>Don’t</strong> merge a cranky REJECT. Don’t bind hosted mode to the public internet.</div>
+      </section>
+
+      <section id="good">
+        <h2><span class="n">8</span> What good engineers did here</h2>
+        <div class="habit-grid">
+          <div class="habit"><strong>Canonical seam first</strong><span>Grok-only first-run didn’t require a TUI rewrite.</span></div>
+          <div class="habit"><strong>Deny before convenience</strong><span>Protected paths beat “it’s just a read.”</span></div>
+          <div class="habit"><strong>Cranky as a gate</strong><span>Diagnose → implement → review → test → merge. Until APPROVE.</span></div>
+          <div class="habit"><strong>Tests next to the bug</strong><span>267 → 307 as races closed.</span></div>
+          <div class="habit"><strong>Gitignored runtime</strong><span>Sessions, keys, beta-logs, graph-runs stay off GitHub.</span></div>
+          <div class="habit"><strong>Buddy in the chair</strong><span>Jared’s 2/5 on prompts beat another catalog test.</span></div>
+        </div>
+      </section>
+
+      <section id="lessons">
+        <h2><span class="n">9</span> Lessons you can steal</h2>
+        <div class="habit-grid">
+          <div class="habit"><strong>Own the tool loop</strong><span>If the SDK runs tools, you don’t have permissions.</span></div>
+          <div class="habit"><strong>Depth 1 is a feature</strong><span>Nested swarms lose the plot and the bill.</span></div>
+          <div class="habit"><strong>Silent needs a policy</strong><span>Deny-stub is not non-interactive acceptEdits.</span></div>
+          <div class="habit"><strong>Two persistences</strong><span>Chat transcripts ≠ graph threads.</span></div>
+          <div class="habit"><strong>Windows is a provider</strong><span>wc is not a tool. Glob is.</span></div>
+          <div class="habit"><strong>Allowlist config</strong><span>.env and MCP env overlays are attack surface.</span></div>
+        </div>
+      </section>
+
+      <section id="next">
+        <h2><span class="n">10</span> Where to go next</h2>
+        <ol class="next">
+          <li>Live TTY: <code>/graph explore</code> and <code>/graph research-implement</code> after restart (<code>a9a0186</code> on main).</li>
+          <li>Hosted mode stays a scaffold — no public bind, no tenants yet.</li>
+          <li>Pin catalog context-window numbers when compaction misbehaves.</li>
+          <li>Graph v1 has no cross-thread store; memory.md is still the long-term tray.</li>
+          <li>Ask-mode bash still prompts when a shell is real — teach <code>a</code>, don’t silent-yolo.</li>
+          <li>Smoke non-Grok providers before a multi-model demo. Jared was Grok-only.</li>
+          <li>Decide the stray <code>examples/tic-tac-toe-pygame.py</code> — not part of the agent.</li>
+        </ol>
+        <h3>Glossary</h3>
+        <table>
+          <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Canonical</td><td>Our message/event/tool types</td></tr>
+            <tr><td>ReAct loop</td><td>Stream → tools → observe → end_turn</td></tr>
+            <tr><td>Depth 1</td><td>Children cannot spawn children</td></tr>
+            <tr><td>Worktree</td><td>Detached git copy; apply copies back</td></tr>
+            <tr><td>forkSilent</td><td>Child engine that never pops the TUI</td></tr>
+            <tr><td>Super-step</td><td>Run ready graph nodes, then checkpoint</td></tr>
+            <tr><td>Cranky</td><td>Structured review; REJECT if any open bug</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <footer>
+      Generated 2026-08-31 · Source: <a href="FORgasan.md">FORgasan.md</a> · Visuals: <code>docs/forme/</code> · polycode coral <code>#d97757</code>
+    </footer>
+  </div>
+</body>
+</html>
