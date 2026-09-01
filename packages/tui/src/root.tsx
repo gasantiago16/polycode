@@ -17,6 +17,7 @@ import type {
   ToolSpec,
 } from "@polycode/core";
 import type { LoadedWorkflow } from "@polycode/workflows";
+import type { LoadedGraph } from "@polycode/graph";
 
 export type { Spec } from "./start.js";
 
@@ -54,6 +55,7 @@ export interface RootProps {
   openWorktree?: () => Promise<{ sandbox: Sandbox; path: string }>;
   hooks?: HookSet;
   workflows?: LoadedWorkflow[];
+  graphs?: LoadedGraph[];
   worktreeOps?: {
     list: () => string[];
     apply: (idOrPath: string) => Promise<{ files: string[]; path: string }>;
@@ -136,6 +138,7 @@ export function Root(props: RootProps) {
       openWorktree={props.openWorktree}
       hooks={props.hooks}
       workflows={props.workflows}
+      graphs={props.graphs}
       worktreeOps={props.worktreeOps}
       statusLine={props.statusLine}
       personas={props.personas}

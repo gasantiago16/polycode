@@ -12,6 +12,7 @@ server mode.
 ## Contents
 
 - [Architecture](architecture.md) — layers, the canonical model, and the agent loop
+- [Agent graphs](graph.md) — LangGraph-shaped state machines on the polycode loop (no LangChain)
 - [Getting Started](getting-started.md) — prerequisites, install, first run, smoke test
 - [Configuration](configuration.md) — config file, tiers, env precedence
 - [Providers & Models](providers.md) — OpenAI/Gemini/xAI, current model IDs, adding a provider

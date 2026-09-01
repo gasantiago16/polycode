@@ -1,0 +1,22 @@
+{
+  "name": "gated",
+  "description": "Explore, then pause before implement (human-in-the-loop)",
+  "interruptBefore": ["implement"],
+  "nodes": {
+    "explore": {
+      "subagent_type": "explore",
+      "prompt": "Read-only survey for:\n\n{{query}}\n\nEnd with GO to implement or STOP to halt."
+    },
+    "implement": {
+      "subagent_type": "general",
+      "isolation": "worktree",
+      "prompt": "Implement in the worktree.\n\n{{query}}\n\nNotes:\n{{last}}"
+    }
+  },
+  "edges": [
+    { "from": "__start__", "to": "explore" },
+    { "from": "explore", "to": "implement", "if": { "field": "last", "includes": "GO" } },
+    { "from": "explore", "to": "__end__" },
+    { "from": "implement", "to": "__end__" }
+  ]
+}

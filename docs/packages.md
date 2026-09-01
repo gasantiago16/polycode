@@ -6,7 +6,8 @@ provider, transport, or UI.
 ```
 cli ─┬─ tui ──┬─ core
      │         ├─ secrets
-     │         └─ workflows ── core
+     │         ├─ workflows ── core
+     │         └─ graph ────── core
      ├─ providers ── core
      ├─ router ──── providers, core
      ├─ tools ───── core
@@ -83,6 +84,12 @@ accent/glyph palette. Deps: `ink`, `ink-text-input`, `ink-spinner`, `react`,
 
 Budgeted TypeScript runner: `runParallel` / `runSequential` / `runWorkflowFile`
 plus JSON loaders (`loadWorkflows`). Host is `spawnChild`. Not Rhai.
+
+## `@polycode/graph`
+
+LangGraph-shaped state machine on the existing loop: JSON graphs, reducers, conditional
+edges, file checkpointer (`.polycode/graph-runs/`). Nodes are `spawnChild` agents. Not
+`@langchain/langgraph`. See [graph.md](graph.md).
 
 ## `@polycode/plugins`
 

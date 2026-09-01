@@ -40,7 +40,16 @@ import {
   runWorkflowFile,
   type LoadedWorkflow,
 } from "@polycode/workflows";
-import { relative } from "node:path";
+import {
+  compileGraph,
+  FileCheckpointStore,
+  formatGraphRun,
+  hostFromSpawn as graphHostFromSpawn,
+  newThreadId,
+  runGraph,
+  type LoadedGraph,
+} from "@polycode/graph";
+import { join, relative } from "node:path";
 import { hydrateEnv, type ProviderId } from "@polycode/secrets";
 import { Banner } from "./banner.js";
 import { Settings } from "./settings.js";
@@ -120,6 +129,7 @@ export interface AppProps {
   openWorktree?: () => Promise<{ sandbox: Sandbox; path: string }>;
   hooks?: HookSet;
   workflows?: LoadedWorkflow[];
+  graphs?: LoadedGraph[];
   worktreeOps?: {
     list: () => string[];
     apply: (idOrPath: string) => Promise<{ files: string[]; path: string }>;
@@ -157,6 +167,7 @@ export function App({
   openWorktree,
   hooks,
   workflows = [],
+  graphs = [],
   worktreeOps,
   statusLine,
   permissionRules = [],
@@ -818,6 +829,94 @@ export function App({
         const { synthesis, parts } = await runWorkflowFile(host, wf, vars);
         const text = synthesis?.output ?? parts.map((p) => p.output).join("\n\n") ?? "(empty workflow)";
         add({ kind: synthesis?.isError ? "error" : "assistant", text });
+      } catch (e) {
+        add({ kind: "error", text: String(e) });
+      } finally {
+        releaseBusy();
+      }
+      persist();
+      return;
+    }
+    if (v === "/graphs") {
+      const list = graphs.length
+        ? graphs.map((g) => `${g.name}  (${g.source})  ${g.description ?? ""}`.trimEnd()).join("\n")
+        : "no graphs (add .polycode/graphs/<name>.json)";
+      add({ kind: "system", text: list });
+      return;
+    }
+    if (v === "/graph" || v.startsWith("/graph ")) {
+      const rest = v.slice("/graph".length).trim();
+      const store = new FileCheckpointStore(join(cwd, ".polycode", "graph-runs"));
+      if (!rest || rest === "list") {
+        const runs = store.list();
+        add({
+          kind: "system",
+          text: runs.length
+            ? runs.map((r) => `${r.threadId}  ${r.status}  ${r.graph}  ${r.steps} steps`).join("\n")
+            : graphs.length
+              ? `usage: /graph <name> [query] · /graph resume <id>\n${graphs.map((g) => g.name).join(", ")}`
+              : "no graphs loaded",
+        });
+        return;
+      }
+      const [first, ...more] = rest.split(/\s+/);
+      if (first === "resume" || first === "status") {
+        const id = more[0];
+        if (!id) {
+          add({ kind: "system", text: `usage: /graph ${first} <thread-id>` });
+          return;
+        }
+        const snap = store.load(id);
+        if (!snap) {
+          add({ kind: "error", text: `unknown graph thread ${id}` });
+          return;
+        }
+        if (first === "status") {
+          add({ kind: "system", text: formatGraphRun(snap) });
+          return;
+        }
+        const g = graphs.find((x) => x.name === snap.graph);
+        if (!g) {
+          add({ kind: "error", text: `graph "${snap.graph}" is not loaded` });
+          return;
+        }
+        if (!acquireBusy()) return;
+        try {
+          const compiled = compileGraph(g);
+          const host = graphHostFromSpawn((job) => agentRef.current.spawnChild(job));
+          const cp = await runGraph({ compiled, host, store, threadId: id, resume: true });
+          add({ kind: cp.status === "failed" ? "error" : "assistant", text: formatGraphRun(cp) });
+        } catch (e) {
+          add({ kind: "error", text: String(e) });
+        } finally {
+          releaseBusy();
+        }
+        persist();
+        return;
+      }
+      const g = graphs.find((x) => x.name === first);
+      if (!g) {
+        add({
+          kind: "error",
+          text: `unknown graph "${first}"${graphs.length ? ` · ${graphs.map((x) => x.name).join(", ")}` : ""}`,
+        });
+        return;
+      }
+      const query = more.join(" ").trim();
+      if (!acquireBusy()) return;
+      try {
+        const compiled = compileGraph(g);
+        const host = graphHostFromSpawn((job) => agentRef.current.spawnChild(job));
+        const threadId = newThreadId();
+        add({ kind: "system", text: `graph ${g.name}  thread ${threadId}` });
+        const cp = await runGraph({
+          compiled,
+          host,
+          store,
+          threadId,
+          input: { query },
+        });
+        add({ kind: cp.status === "failed" ? "error" : "assistant", text: formatGraphRun(cp) });
       } catch (e) {
         add({ kind: "error", text: String(e) });
       } finally {

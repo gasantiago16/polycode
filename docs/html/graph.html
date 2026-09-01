@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent graphs · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="graph.html" class="active">Agent graphs</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="deploy.html">Build & Deploy</a>
+<a href="roadmap.html">Roadmap</a>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="beta-survey.html">beta-survey</a>
+<a href="beta-test.html">beta-test</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
+<main>
+<h1>Agent graphs (LangGraph-shaped)</h1>
+<p>polycode does <strong>not</strong> depend on LangChain/LangGraph. Those libraries own a Python/JS
+state-machine runtime (StateGraph + checkpointer + store) tightly coupled to LangChain
+messages. polycode already has a provider-blind ReAct loop, canonical tools, permissions,
+and JSON sessions. This package maps the <em>useful</em> LangGraph ideas onto that loop.</p>
+<h2>What LangGraph actually is</h2>
+<table>
+<thead>
+<tr>
+<th>Primitive</th>
+<th>LangGraph</th>
+<th>polycode graph</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>State</td>
+<td>typed channels + reducers</td>
+<td>JSON object, <code>replace</code> or <code>append</code> per key</td>
+</tr>
+<tr>
+<td>Node</td>
+<td>function <code>(state) =&gt; patch</code></td>
+<td>child <strong>agent</strong> (<code>spawnChild</code>) with a <code>{{state}}</code> prompt</td>
+</tr>
+<tr>
+<td>Edge</td>
+<td>fixed or conditional</td>
+<td><code>{ from, to }</code> or <code>{ from, to, if: { field, includes } }</code></td>
+</tr>
+<tr>
+<td>Super-step</td>
+<td>run ready nodes (possibly parallel)</td>
+<td>same: all <code>next</code> nodes in one <code>Promise.all</code></td>
+</tr>
+<tr>
+<td>Checkpointer</td>
+<td>thread-scoped snapshot after each super-step</td>
+<td><code>.polycode/graph-runs/&lt;thread&gt;.json</code></td>
+</tr>
+<tr>
+<td>Interrupt</td>
+<td><code>interruptBefore</code> / human-in-the-loop</td>
+<td>pause, <code>/graph resume &lt;id&gt;</code></td>
+</tr>
+<tr>
+<td>Store (cross-thread)</td>
+<td>deferred</td>
+<td>not in v1 — use <code>.polycode/memory.md</code></td>
+</tr>
+</tbody></table>
+<p>We do <strong>not</strong> import <code>@langchain/langgraph</code>. It would smash the canonical message/tool
+seam and pull a second agent stack.</p>
+<h2>Authoring</h2>
+<p>Project file <code>.polycode/graphs/&lt;name&gt;.json</code> (or <code>graphs/</code> under the user config dir).
+Bundled: <code>explore</code>, <code>research-implement</code>.</p>
+<pre><code class="language-json">{
+  &quot;name&quot;: &quot;research-implement&quot;,
+  &quot;description&quot;: &quot;Explore then worktree implement&quot;,
+  &quot;nodes&quot;: {
+    &quot;explore&quot;: {
+      &quot;subagent_type&quot;: &quot;explore&quot;,
+      &quot;prompt&quot;: &quot;Survey:\n\n{{query}}&quot;
+    },
+    &quot;implement&quot;: {
+      &quot;subagent_type&quot;: &quot;general&quot;,
+      &quot;isolation&quot;: &quot;worktree&quot;,
+      &quot;prompt&quot;: &quot;Implement.\n\n{{query}}\n\n{{last}}&quot;
+    }
+  },
+  &quot;edges&quot;: [
+    { &quot;from&quot;: &quot;__start__&quot;, &quot;to&quot;: &quot;explore&quot; },
+    { &quot;from&quot;: &quot;explore&quot;, &quot;to&quot;: &quot;implement&quot; },
+    { &quot;from&quot;: &quot;implement&quot;, &quot;to&quot;: &quot;__end__&quot; }
+  ]
+}
+</code></pre>
+<p>Conditional: <code>{ &quot;from&quot;: &quot;explore&quot;, &quot;to&quot;: &quot;__end__&quot;, &quot;if&quot;: { &quot;field&quot;: &quot;last&quot;, &quot;includes&quot;: &quot;REJECT&quot; } }</code>.
+If any <code>if</code> matches, those edges win; otherwise unconditional edges from that node.</p>
+<p><code>interruptBefore: [&quot;implement&quot;]</code> writes a checkpoint with <code>status: interrupted</code> and waits
+for <code>/graph resume &lt;thread&gt;</code>.</p>
+<h2>TUI</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/graphs</code></td>
+<td>Bundled + user + project graphs</td>
+</tr>
+<tr>
+<td><code>/graph &lt;name&gt; [query]</code></td>
+<td>Compile, run, checkpoint each super-step</td>
+</tr>
+<tr>
+<td><code>/graph</code> / <code>/graph list</code></td>
+<td>Saved threads under <code>.polycode/graph-runs/</code></td>
+</tr>
+<tr>
+<td><code>/graph status &lt;id&gt;</code></td>
+<td>Dump checkpoint</td>
+</tr>
+<tr>
+<td><code>/graph resume &lt;id&gt;</code></td>
+<td>Continue interrupted/failed</td>
+</tr>
+</tbody></table>
+<p>Each node is a depth-1 child: same tools, sandbox, permission engine as <code>/team</code>. Worktree
+nodes still isolate writes.</p>
+<h2>Persistence</h2>
+<p>Checkpoints are <strong>not</strong> chat transcripts (those stay in <code>.polycode/sessions/</code>). A graph
+thread stores <code>state</code>, <code>next</code>, <code>history</code>, and <code>status</code> so a crash or <code>/exit</code> can resume
+the machine, not only the last assistant message.</p>
+<p>Caps: <code>maxSteps</code> 1–64 (default 16), checkpoint file 256k, thread id <code>[A-Za-z0-9._-]</code>.</p>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

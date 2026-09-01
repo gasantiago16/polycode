@@ -18,6 +18,7 @@ describe("slash catalog", () => {
   it("matches prefixes and aliases", () => {
     expect(matchSlash("/mo").map((c) => c.name)).toEqual(["model", "mode"]);
     expect(matchSlash("/crank").map((c) => c.name)).toEqual(["review"]);
+    expect(matchSlash("/gra").map((c) => c.name)).toEqual(["graphs", "graph"]);
   });
 
   it("tab-completes a unique prefix and a common prefix", () => {

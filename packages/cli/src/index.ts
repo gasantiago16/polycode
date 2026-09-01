@@ -39,6 +39,7 @@ import {
   type SandboxKind,
 } from "@polycode/sandbox";
 import { loadWorkflows } from "@polycode/workflows";
+import { loadGraphs } from "@polycode/graph";
 import { loadPlugins } from "@polycode/plugins";
 import { createLspTool } from "@polycode/lsp";
 import { hydrateEnv, loadDotEnvFiles, envFileCandidates, getKey, ENV_VAR, type ProviderId } from "@polycode/secrets";
@@ -394,6 +395,7 @@ async function main(): Promise<void> {
       source: p.source,
     })),
     workflows: loadWorkflows(cwd),
+    graphs: loadGraphs(cwd),
     statusLine: cfg.statusLine,
     worktreeOps: sandbox.projectPath
       ? {

@@ -69,6 +69,13 @@ pushUser(text)
 This keeps gating, rendering, and (later) parallel scheduling under our control rather than
 the SDK's.
 
+## Agent graphs
+
+`@polycode/graph` is a small state machine **on top of** this loop, not a second agent
+framework. Nodes are depth-1 child agents; edges are fixed or `if.field` conditionals;
+each super-step is checkpointed under `.polycode/graph-runs/`. See [graph.md](graph.md).
+It is intentionally **not** LangGraph — no LangChain messages, no extra model stack.
+
 Before each `provider.stream`, the loop estimates tokens (`chars/4`) and, at 85% of
 `capabilities().contextWindow`, runs two-pass compaction: elide old `tool_result` bodies,
 then (if still over) summarize older turns with the cheap-tier provider into one
