@@ -34,6 +34,7 @@
 <div class="wrap">
 <nav><h1>polycode docs</h1><a href="index.html">Overview</a>
 <a href="architecture.html">Architecture</a>
+<a href="graph.html">Agent graphs</a>
 <a href="getting-started.html">Getting Started</a>
 <a href="configuration.html">Configuration</a>
 <a href="providers.html">Providers & Models</a>
@@ -43,6 +44,8 @@
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
 <a href="continuity.html">Continuity / Handoff</a>
+<a href="beta-survey.html">beta-survey</a>
+<a href="beta-test.html">beta-test</a>
 <a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Packages</h1>
@@ -50,7 +53,8 @@
 provider, transport, or UI.</p>
 <pre><code>cli ─┬─ tui ──┬─ core
      │         ├─ secrets
-     │         └─ workflows ── core
+     │         ├─ workflows ── core
+     │         └─ graph ────── core
      ├─ providers ── core
      ├─ router ──── providers, core
      ├─ tools ───── core
@@ -150,6 +154,10 @@ accent/glyph palette. Deps: <code>ink</code>, <code>ink-text-input</code>, <code
 <h2><code>@polycode/workflows</code></h2>
 <p>Budgeted TypeScript runner: <code>runParallel</code> / <code>runSequential</code> / <code>runWorkflowFile</code>
 plus JSON loaders (<code>loadWorkflows</code>). Host is <code>spawnChild</code>. Not Rhai.</p>
+<h2><code>@polycode/graph</code></h2>
+<p>LangGraph-shaped state machine on the existing loop: JSON graphs, reducers, conditional
+edges, file checkpointer (<code>.polycode/graph-runs/</code>). Nodes are <code>spawnChild</code> agents. Not
+<code>@langchain/langgraph</code>. See <a href="graph.html">graph.md</a>.</p>
 <h2><code>@polycode/plugins</code></h2>
 <p><code>loadPlugins(cwd)</code> reads <code>.polycode/plugins/&lt;name&gt;/</code> and user plugins. A bundle can ship
 skills, slash commands, extra <code>task</code> agents, hooks, MCP servers, and LSP server configs.</p>

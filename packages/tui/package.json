@@ -10,6 +10,7 @@
     "@polycode/core": "workspace:*",
     "@polycode/secrets": "workspace:*",
     "@polycode/workflows": "workspace:*",
+    "@polycode/graph": "workspace:*",
     "ink": "^5.1.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",

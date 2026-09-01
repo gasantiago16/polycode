@@ -85,6 +85,9 @@ importers:
       '@polycode/core':
         specifier: workspace:*
         version: link:../core
+      '@polycode/graph':
+        specifier: workspace:*
+        version: link:../graph
       '@polycode/lsp':
         specifier: workspace:*
         version: link:../lsp
@@ -129,6 +132,12 @@ importers:
         version: 5.9.3
 
   packages/core: {}
+
+  packages/graph:
+    dependencies:
+      '@polycode/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/lsp:
     dependencies:
@@ -221,6 +230,9 @@ importers:
       '@polycode/core':
         specifier: workspace:*
         version: link:../core
+      '@polycode/graph':
+        specifier: workspace:*
+        version: link:../graph
       '@polycode/secrets':
         specifier: workspace:*
         version: link:../secrets

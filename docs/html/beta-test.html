@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>beta-test · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="graph.html">Agent graphs</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="deploy.html">Build & Deploy</a>
+<a href="roadmap.html">Roadmap</a>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="beta-survey.html">beta-survey</a>
+<a href="beta-test.html" class="active">beta-test</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
+<main>
+<h1>Beta test — buddy playbook</h1>
+<p>polycode is a <strong>terminal</strong> coding agent (not a website). Your buddy runs it on their
+machine, or sits at yours. Results of automated checks + a fill-in checklist are logged
+<strong>locally</strong> under <code>.polycode/beta-logs/</code> (gitignored — never committed, no API keys).</p>
+<h2>You (host)</h2>
+<p>From the repo:</p>
+<pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\gasan\OneDrive\Dev\Projects\polycode&quot; install
+corepack pnpm -C &quot;C:\Users\gasan\OneDrive\Dev\Projects\polycode&quot; beta -- --tester you
+</code></pre>
+<p>That runs typecheck + the unit suite and writes two local files (gitignored):</p>
+<ul>
+<li><code>.polycode/beta-logs/&lt;timestamp&gt;_you.md</code></li>
+<li><code>.polycode/beta-logs/LATEST.md</code> (last <strong>automated</strong> run — send this one; checklist-only does not overwrite it)</li>
+</ul>
+<p>Live model round-trip (needs a Grok key already saved):</p>
+<pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\gasan\OneDrive\Dev\Projects\polycode&quot; beta -- --tester you --smoke xai:grok-4.3
+</code></pre>
+<p>Checklist-only (no test run — just a blank log for a session):</p>
+<pre><code class="language-powershell">corepack pnpm -C &quot;C:\Users\gasan\OneDrive\Dev\Projects\polycode&quot; beta -- --tester buddy --checklist-only
+</code></pre>
+<p>Send your buddy <strong>that markdown file</strong> after they fill the checkboxes. Not <code>.env</code>, not the keychain.</p>
+<h2>Your buddy (first 10 minutes)</h2>
+<ol>
+<li>Node 20+ installed.</li>
+<li>In the repo:</li>
+</ol>
+<pre><code class="language-powershell">corepack pnpm install
+corepack pnpm dev
+</code></pre>
+<ol start="3">
+<li>Settings: arrow to <strong>xAI (Grok)</strong> (not Meta Muse). Enter → paste <code>xai-…</code> key → Enter.
+Chat should open. If stuck, they have a Grok key in <code>.env</code> as <code>XAI_API_KEY=</code> or <code>GROK_API_KEY=</code> and press <strong>i</strong>.</li>
+<li>Work through the checklist in the log file (or below). Mark pass/fail. No keys in notes.</li>
+<li>Quit with <code>/exit</code>.</li>
+</ol>
+<h3>What to try</h3>
+<table>
+<thead>
+<tr>
+<th>Try</th>
+<th>Expect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/help</code></td>
+<td>Overlay of commands, Esc closes</td>
+</tr>
+<tr>
+<td><code>/mo</code> + Tab</td>
+<td>Completes toward <code>/mode</code> or <code>/model</code></td>
+</tr>
+<tr>
+<td>“what is this repo?”</td>
+<td>Tools run; answer mentions polycode</td>
+</tr>
+<tr>
+<td><code>/mode plan</code> then “edit README”</td>
+<td>Writes refused</td>
+</tr>
+<tr>
+<td><code>/mode ask</code> then a tiny edit</td>
+<td><code>y</code> / <code>a</code> / <code>n</code> prompt</td>
+</tr>
+<tr>
+<td><code>/team add a comment in README</code></td>
+<td>Explorers, then a worktree implement (git repo)</td>
+</tr>
+<tr>
+<td><code>/dashboard</code></td>
+<td>Child list; Enter peek; <code>a</code> attach</td>
+</tr>
+<tr>
+<td>Long turn + <strong>Ctrl+B</strong></td>
+<td>Composer comes back; kids still in dashboard</td>
+</tr>
+<tr>
+<td><code>/loop 15s say ping</code></td>
+<td>Recurring line; <code>/loop stop</code> ends it</td>
+</tr>
+<tr>
+<td><code>/hepl</code></td>
+<td>Error “did you mean /help?” — not sent to Grok</td>
+</tr>
+</tbody></table>
+<h2>Safety for a buddy on your box</h2>
+<ul>
+<li>Use <strong>ask</strong> mode (<code>/mode ask</code>), not yolo.</li>
+<li>They should not need <code>--serve</code> (hosted HTTP).</li>
+<li>Their key: they paste their own Grok key, or you temporarily set one and <code>/settings</code> when they leave.</li>
+<li>Logs in <code>.polycode/beta-logs/</code> are local only.</li>
+</ul>
+<h2>After the session</h2>
+<p>Give them the survey (pick one):</p>
+<ul>
+<li>Fill-in page: open <a href="beta-survey.html"><code>beta-survey.html</code></a> in a browser — Download answers, drop the <code>.md</code> in <code>.polycode/beta-logs/</code></li>
+<li>Markdown: <a href="beta-survey.html"><code>beta-survey.md</code></a></li>
+</ul>
+<pre><code class="language-powershell">corepack pnpm beta -- --tester buddy-name --checklist-only
+</code></pre>
+<p>Keep the filled survey in <code>.polycode/beta-logs/</code>. Not <code>.env</code>, not the keychain.</p>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

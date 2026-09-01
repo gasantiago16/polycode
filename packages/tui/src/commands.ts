@@ -45,6 +45,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "mcp", group: "extend", summary: "MCP servers" },
   { name: "workflows", group: "extend", summary: "List workflows" },
   { name: "workflow", usage: "<name> [query]", group: "extend", summary: "Run a workflow" },
+  { name: "graphs", group: "extend", summary: "List LangGraph-shaped agent graphs" },
+  { name: "graph", usage: "<name> [query]|resume <id>", group: "extend", summary: "Run or resume a checkpointed graph" },
   { name: "deep-research", usage: "<question>", group: "extend", summary: "Budgeted research workflow" },
   { name: "deep-research-review", usage: "[path]", group: "extend", summary: "Claim/fidelity review" },
 ];

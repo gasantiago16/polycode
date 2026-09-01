@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>beta-survey · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="graph.html">Agent graphs</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="deploy.html">Build & Deploy</a>
+<a href="roadmap.html">Roadmap</a>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="beta-survey.html" class="active">beta-survey</a>
+<a href="beta-test.html">beta-test</a>
+<a href="buildout-plan.html">buildout-plan</a></nav>
+<main>
+<h1>polycode beta survey</h1>
+<p>Takes ~10 minutes after a TUI session. <strong>Do not paste API keys.</strong></p>
+<p>Name: _______________<br>Date: _______________<br>OS / terminal: Windows Terminal / macOS Terminal / other: _______________<br>Time spent: _____ minutes</p>
+<h2>First run</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Pass</th>
+<th>Fail</th>
+<th>Skip</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>corepack pnpm install</code> then <code>corepack pnpm dev</code> started</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Arrow to <strong>xAI (Grok)</strong> (not Meta Muse), pasted key, landed in <strong>chat</strong> (not stuck on settings)</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>If already keyed: chat opened without a settings loop</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Stuck on settings? What did you see?</p>
+<hr>
+<h2>Try these (ask mode, not yolo)</h2>
+<table>
+<thead>
+<tr>
+<th>Try</th>
+<th>Expect</th>
+<th>Pass</th>
+<th>Fail</th>
+<th>Skip</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/help</code></td>
+<td>Overlay; Esc closes</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/mo</code> then Tab</td>
+<td>Completes toward <code>/mode</code> or <code>/model</code></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>what is this repo?</code></td>
+<td>Tools run; answer cites files</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/mode plan</code> then “edit README”</td>
+<td>Writes refused</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/mode ask</code> then a tiny edit</td>
+<td><code>y</code> / <code>a</code> / <code>n</code> prompt</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/team add a comment in README</code></td>
+<td>Explorers, then worktree implement</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/dashboard</code> or Ctrl+\</td>
+<td>Child list; Enter peek; <code>a</code> attach</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Long turn + <strong>Ctrl+B</strong></td>
+<td>Composer back; kids still in dashboard</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/loop 15s say ping</code> then <code>/loop stop</code></td>
+<td>Recurring line, then stops</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/hepl</code></td>
+<td>Suggests <code>/help</code> — <strong>not</strong> sent to Grok</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td><code>/exit</code> then <code>corepack pnpm dev -- --continue</code></td>
+<td>Session resumes</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<h2>Ratings (1 = broken / awful · 3 = ok · 5 = I’d use this)</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>1</th>
+<th>2</th>
+<th>3</th>
+<th>4</th>
+<th>5</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Getting in (install + first run)</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Chat / streaming feel</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Slash commands + Tab complete</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Permission prompts (plan / ask)</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Multi-agent (<code>/team</code>, dashboard, Ctrl+B)</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Overall vs Cursor / Claude Code / Grok Build</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody></table>
+<p>Would you use this again?  Yes / Maybe / No</p>
+<h2>Open</h2>
+<p>What felt good?</p>
+<hr>
+<p>What was confusing or broken? (no keys)</p>
+<hr>
+<p>One thing to fix before the next person sits down:</p>
+<hr>
+<p>Anything else?</p>
+<hr>
+<p>Drop this file in <code>.polycode/beta-logs/</code> (gitignored) or send it back. Not <code>.env</code>, not the keychain.</p>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>

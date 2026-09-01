@@ -18,6 +18,7 @@ const outDir = join(docsDir, "html");
 const ORDER: Array<[string, string]> = [
   ["index.md", "Overview"],
   ["architecture.md", "Architecture"],
+  ["graph.md", "Agent graphs"],
   ["getting-started.md", "Getting Started"],
   ["configuration.md", "Configuration"],
   ["providers.md", "Providers & Models"],

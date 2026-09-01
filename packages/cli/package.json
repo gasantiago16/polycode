@@ -38,6 +38,7 @@
     "@polycode/tools": "workspace:*",
     "@polycode/tui": "workspace:*",
     "@polycode/workflows": "workspace:*",
+    "@polycode/graph": "workspace:*",
     "tsup": "^8.3.0",
     "typescript": "^5.6.3"
   }

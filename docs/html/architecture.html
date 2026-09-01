@@ -34,6 +34,7 @@
 <div class="wrap">
 <nav><h1>polycode docs</h1><a href="index.html">Overview</a>
 <a href="architecture.html" class="active">Architecture</a>
+<a href="graph.html">Agent graphs</a>
 <a href="getting-started.html">Getting Started</a>
 <a href="configuration.html">Configuration</a>
 <a href="providers.html">Providers & Models</a>
@@ -43,6 +44,8 @@
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
 <a href="continuity.html">Continuity / Handoff</a>
+<a href="beta-survey.html">beta-survey</a>
+<a href="beta-test.html">beta-test</a>
 <a href="buildout-plan.html">buildout-plan</a></nav>
 <main>
 <h1>Architecture</h1>
@@ -135,6 +138,11 @@ loops until <code>stop_reason</code> is <code>end_turn</code>.</p>
 </code></pre>
 <p>This keeps gating, rendering, and (later) parallel scheduling under our control rather than
 the SDK&#39;s.</p>
+<h2>Agent graphs</h2>
+<p><code>@polycode/graph</code> is a small state machine <strong>on top of</strong> this loop, not a second agent
+framework. Nodes are depth-1 child agents; edges are fixed or <code>if.field</code> conditionals;
+each super-step is checkpointed under <code>.polycode/graph-runs/</code>. See <a href="graph.html">graph.md</a>.
+It is intentionally <strong>not</strong> LangGraph — no LangChain messages, no extra model stack.</p>
 <p>Before each <code>provider.stream</code>, the loop estimates tokens (<code>chars/4</code>) and, at 85% of
 <code>capabilities().contextWindow</code>, runs two-pass compaction: elide old <code>tool_result</code> bodies,
 then (if still over) summarize older turns with the cheap-tier provider into one
