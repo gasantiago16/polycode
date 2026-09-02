@@ -43,6 +43,8 @@ import {
 import {
   compileGraph,
   FileCheckpointStore,
+  formatGraphDef,
+  formatGraphProgress,
   formatGraphRun,
   hostFromSpawn as graphHostFromSpawn,
   newThreadId,
@@ -197,6 +199,7 @@ export function App({
   const [showHelp, setShowHelp] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [dashRuns, setDashRuns] = useState<ChildRun[]>([]);
+  const [graphLine, setGraphLine] = useState<string | undefined>();
   const [exitHint, setExitHint] = useState(false);
   const [modelLabel, setModelLabel] = useState(`${provider.id}:${provider.model}`);
   const [mode, setMode] = useState<PermissionMode>("ask");
@@ -304,6 +307,7 @@ export function App({
       mcpDeferred: tools.filter((t) => t.schemaDeferred).length,
       cost: compactCostUsd([...agentRef.current.usageLedger()]),
       cwd,
+      kids: agentRef.current.listChildren().filter((c) => c.status === "running").length,
     };
     void sandbox.exec(expandStatusCommand(cmd, vars), { timeoutMs: 800 }).then((r) => {
       if (cancelled) return;
@@ -358,7 +362,9 @@ export function App({
   };
   const refreshDash = useCallback(() => {
     setDashRuns(agentRef.current.listChildren());
-  }, []);
+    const last = new FileCheckpointStore(join(cwd, ".polycode", "graph-runs")).list()[0];
+    setGraphLine(last ? formatGraphProgress(last) : undefined);
+  }, [cwd]);
 
   // elapsed-time ticker while busy
   useEffect(() => {
@@ -461,7 +467,7 @@ export function App({
   useInput(
     (ch, key) => {
       if (key.ctrl && (ch === "\\" || ch === "|")) {
-        setDashRuns(agentRef.current.listChildren());
+        refreshDash();
         setShowDashboard((v) => !v);
       }
     },
@@ -582,7 +588,7 @@ export function App({
       return;
     }
     if (v === "/dashboard" || v === "/agents") {
-      setDashRuns(agentRef.current.listChildren());
+      refreshDash();
       setShowDashboard(true);
       return;
     }
@@ -839,7 +845,9 @@ export function App({
     }
     if (v === "/graphs") {
       const list = graphs.length
-        ? graphs.map((g) => `${g.name}  (${g.source})  ${g.description ?? ""}`.trimEnd()).join("\n")
+        ? graphs
+            .map((g) => `${g.name}  (${g.source})  ${formatGraphDef(g).split("\n")[0]}\n  ${g.description ?? ""}`.trimEnd())
+            .join("\n")
         : "no graphs (add .polycode/graphs/<name>.json)";
       add({ kind: "system", text: list });
       return;
@@ -860,6 +868,24 @@ export function App({
         return;
       }
       const [first, ...more] = rest.split(/\s+/);
+      if (first === "show") {
+        const name = more[0];
+        const g = name ? graphs.find((x) => x.name === name) : undefined;
+        if (!g) {
+          add({
+            kind: "system",
+            text: name
+              ? `unknown graph "${name}"`
+              : `usage: /graph show <name>\n${graphs.map((x) => x.name).join(", ")}`,
+          });
+          return;
+        }
+        add({
+          kind: "system",
+          text: `${g.name}  (${g.source})\n${formatGraphDef(g)}${g.description ? `\n${g.description}` : ""}`,
+        });
+        return;
+      }
       if (first === "resume" || first === "status") {
         const id = more[0];
         if (!id) {
@@ -884,7 +910,14 @@ export function App({
         try {
           const compiled = compileGraph(g);
           const host = graphHostFromSpawn((job) => agentRef.current.spawnChild(job));
-          const cp = await runGraph({ compiled, host, store, threadId: id, resume: true });
+          const cp = await runGraph({
+            compiled,
+            host,
+            store,
+            threadId: id,
+            resume: true,
+            onStep: (s) => add({ kind: "system", text: formatGraphProgress(s) }),
+          });
           add({ kind: cp.status === "failed" ? "error" : "assistant", text: formatGraphRun(cp) });
         } catch (e) {
           add({ kind: "error", text: String(e) });
@@ -915,6 +948,7 @@ export function App({
           store,
           threadId,
           input: { query },
+          onStep: (s) => add({ kind: "system", text: formatGraphProgress(s) }),
         });
         add({ kind: cp.status === "failed" ? "error" : "assistant", text: formatGraphRun(cp) });
       } catch (e) {
@@ -1247,6 +1281,7 @@ export function App({
     mcpDeferred: tools.filter((t) => t.schemaDeferred).length,
     cost: compactCostUsd([...agentRef.current.usageLedger()]),
     cwd,
+    kids: agentRef.current.listChildren().filter((c) => c.status === "running").length,
   };
   const statusText = statusCmdOut ?? formatStatusLine(statusTemplate, statusVars);
   const staticRows: StaticRow[] = [
@@ -1324,6 +1359,7 @@ export function App({
         <Dashboard
           runs={dashRuns}
           personas={personas}
+          graphLine={graphLine}
           onRefresh={refreshDash}
           onKill={(id) => {
             const r = agentRef.current.killChild(id);

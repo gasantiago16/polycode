@@ -11,6 +11,7 @@ export function Dashboard({
   onPeek,
   onAttach,
   onClose,
+  graphLine,
 }: {
   runs: ChildRun[];
   personas?: Persona[];
@@ -19,6 +20,7 @@ export function Dashboard({
   onPeek: (id: string) => ChildRun | null;
   onAttach: (id: string) => void;
   onClose: () => void;
+  graphLine?: string;
 }) {
   const [sel, setSel] = useState(0);
   const [peekId, setPeekId] = useState<string | null>(null);
@@ -67,6 +69,7 @@ export function Dashboard({
         </Text>
       </Text>
       <Text> </Text>
+      {graphLine && !peek ? <Text color={theme.dim}>{graphLine}</Text> : null}
       {peek ? (
         <Box flexDirection="column">
           <Text color={theme.warning}>{formatChildLine(peek)}</Text>

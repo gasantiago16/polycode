@@ -224,6 +224,9 @@ importers:
       '@polycode/core':
         specifier: workspace:*
         version: link:../core
+      '@polycode/graph':
+        specifier: workspace:*
+        version: link:../graph
 
   packages/tui:
     dependencies:

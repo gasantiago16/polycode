@@ -44,9 +44,11 @@
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
 <a href="continuity.html">Continuity / Handoff</a>
+<a href="FORgasan.html">FORgasan</a>
 <a href="beta-survey.html">beta-survey</a>
 <a href="beta-test.html">beta-test</a>
-<a href="buildout-plan.html">buildout-plan</a></nav>
+<a href="buildout-plan.html">buildout-plan</a>
+<a href="demo-script.html">demo-script</a></nav>
 <main>
 <h1>Agent graphs (LangGraph-shaped)</h1>
 <p>polycode does <strong>not</strong> depend on LangChain/LangGraph. Those libraries own a Python/JS
@@ -102,7 +104,7 @@ and JSON sessions. This package maps the <em>useful</em> LangGraph ideas onto th
 seam and pull a second agent stack.</p>
 <h2>Authoring</h2>
 <p>Project file <code>.polycode/graphs/&lt;name&gt;.json</code> (or <code>graphs/</code> under the user config dir).
-Bundled: <code>explore</code>, <code>research-implement</code>.</p>
+Bundled: <code>demo</code> (stage-safe one-node explore, no worktree), <code>explore</code>, <code>research-implement</code>.</p>
 <pre><code class="language-json">{
   &quot;name&quot;: &quot;research-implement&quot;,
   &quot;description&quot;: &quot;Explore then worktree implement&quot;,
@@ -138,11 +140,15 @@ for <code>/graph resume &lt;thread&gt;</code>.</p>
 </thead>
 <tbody><tr>
 <td><code>/graphs</code></td>
-<td>Bundled + user + project graphs</td>
+<td>Bundled + user + project graphs, each with a one-line ASCII DAG</td>
+</tr>
+<tr>
+<td><code>/graph show &lt;name&gt;</code></td>
+<td>Full DAG + description</td>
 </tr>
 <tr>
 <td><code>/graph &lt;name&gt; [query]</code></td>
-<td>Compile, run, checkpoint each super-step</td>
+<td>Compile, run, checkpoint each super-step (progress lines as it goes)</td>
 </tr>
 <tr>
 <td><code>/graph</code> / <code>/graph list</code></td>
@@ -157,8 +163,11 @@ for <code>/graph resume &lt;thread&gt;</code>.</p>
 <td>Continue interrupted/failed</td>
 </tr>
 </tbody></table>
+<p>The parent also has a <code>graph</code> tool (stripped from children) so the model can invoke a named
+pipeline instead of chaining <code>task</code> calls. Statusline shows <code>c:N</code> while children run;
+<code>/dashboard</code> prints the last graph thread under the child list.</p>
 <p>Each node is a depth-1 child: same tools, sandbox, permission engine as <code>/team</code>. Worktree
-nodes still isolate writes.</p>
+nodes still isolate writes. Prefer <code>/graph demo &lt;query&gt;</code> on a live stage — it is explore-only.</p>
 <h2>Persistence</h2>
 <p>Checkpoints are <strong>not</strong> chat transcripts (those stay in <code>.polycode/sessions/</code>). A graph
 thread stores <code>state</code>, <code>next</code>, <code>history</code>, and <code>status</code> so a crash or <code>/exit</code> can resume

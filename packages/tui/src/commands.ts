@@ -46,7 +46,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: "workflows", group: "extend", summary: "List workflows" },
   { name: "workflow", usage: "<name> [query]", group: "extend", summary: "Run a workflow" },
   { name: "graphs", group: "extend", summary: "List LangGraph-shaped agent graphs" },
-  { name: "graph", usage: "<name> [query]|resume <id>", group: "extend", summary: "Run or resume a checkpointed graph" },
+  { name: "graph", usage: "<name> [query]|show|resume <id>", group: "extend", summary: "Run, show DAG, or resume a graph" },
   { name: "deep-research", usage: "<question>", group: "extend", summary: "Budgeted research workflow" },
   { name: "deep-research-review", usage: "[path]", group: "extend", summary: "Claim/fidelity review" },
 ];

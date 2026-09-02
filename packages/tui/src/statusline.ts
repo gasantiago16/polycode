@@ -13,10 +13,12 @@ export interface StatusLineVars {
   mcpDeferred: number;
   cost: string;
   cwd: string;
+  /** Running child agents (dashboard). */
+  kids?: number;
 }
 
 export const DEFAULT_STATUS_TEMPLATE =
-  "$model · $mode · route:$route · sandbox:$sandbox$ctx_seg$sum_seg$mcp_seg";
+  "$model · $mode · route:$route · sandbox:$sandbox$ctx_seg$sum_seg$mcp_seg$kids_seg";
 
 export function fmtK(n: number): string {
   if (n < 1000) return String(n);
@@ -47,6 +49,8 @@ export function statusLineVars(partial: StatusLineVars): Record<string, string> 
     cost: partial.cost,
     cost_seg: partial.cost && partial.cost !== "$0.00" ? ` · ${partial.cost}` : "",
     cwd: basename(partial.cwd) || partial.cwd,
+    kids: partial.kids && partial.kids > 0 ? String(partial.kids) : "",
+    kids_seg: partial.kids && partial.kids > 0 ? ` · c:${partial.kids}` : "",
   };
 }
 

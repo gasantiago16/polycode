@@ -6,7 +6,8 @@ import { compileGraph, GraphCompileError } from "./compile.js";
 import { FileCheckpointStore } from "./checkpoint.js";
 import { expandTemplate, mergeState } from "./reduce.js";
 import { runGraph } from "./run.js";
-import { parseGraphDef } from "./load.js";
+import { bundledGraphs, parseGraphDef } from "./load.js";
+import { formatGraphDef, formatGraphProgress } from "./format.js";
 import { END, START, type GraphDef, type GraphHost } from "./types.js";
 
 const dirs: string[] = [];
@@ -150,6 +151,39 @@ describe("runGraph", () => {
 
   it("jails thread ids", () => {
     expect(() => new FileCheckpointStore("/tmp").load("../x")).toThrow(/invalid graph thread/);
+  });
+});
+
+describe("formatGraphDef", () => {
+  it("renders a linear DAG", () => {
+    expect(formatGraphDef(linear())).toMatch(/START → a → b → __end__/);
+  });
+
+  it("renders a progress line", () => {
+    expect(
+      formatGraphProgress({
+        version: 1,
+        threadId: "t",
+        graph: "demo",
+        state: {},
+        next: ["implement"],
+        status: "interrupted",
+        steps: 1,
+        history: [{ node: "explore", output: "ok" }],
+        updatedAt: "",
+      }),
+    ).toMatch(/done explore · next implement/);
+  });
+});
+
+describe("bundled demo", () => {
+  it("compiles as a one-node explore DAG", () => {
+    const demo = bundledGraphs().find((g) => g.name === "demo");
+    expect(demo).toBeTruthy();
+    expect(demo!.nodes.explore.subagent_type).toBe("explore");
+    expect(demo!.nodes.explore.isolation).not.toBe("worktree");
+    expect(compileGraph(demo!).successors(START, {})).toEqual(["explore"]);
+    expect(formatGraphDef(demo!)).toMatch(/START → explore → __end__/);
   });
 });
 

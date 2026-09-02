@@ -44,9 +44,11 @@
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
 <a href="continuity.html">Continuity / Handoff</a>
+<a href="FORgasan.html">FORgasan</a>
 <a href="beta-survey.html">beta-survey</a>
 <a href="beta-test.html">beta-test</a>
-<a href="buildout-plan.html">buildout-plan</a></nav>
+<a href="buildout-plan.html">buildout-plan</a>
+<a href="demo-script.html">demo-script</a></nav>
 <main>
 <h1>CLI Reference</h1>
 <h2>Scripts (run via Corepack pnpm)</h2>
@@ -249,11 +251,15 @@
 </tr>
 <tr>
 <td><code>/graphs</code></td>
-<td>Bundled + <code>.polycode/graphs/*.json</code> agent graphs.</td>
+<td>Bundled + <code>.polycode/graphs/*.json</code> agent graphs (ASCII DAG).</td>
+</tr>
+<tr>
+<td><code>/graph show &lt;name&gt;</code></td>
+<td>Print a graph&#39;s DAG.</td>
 </tr>
 <tr>
 <td><code>/graph &lt;name&gt; [query]</code></td>
-<td>Run a checkpointed graph (<code>/graph resume &lt;id&gt;</code>, <code>/graph status &lt;id&gt;</code>).</td>
+<td>Run a checkpointed graph (<code>/graph resume &lt;id&gt;</code>, <code>/graph status &lt;id&gt;</code>). Stage-safe: <code>/graph demo …</code>.</td>
 </tr>
 <tr>
 <td><code>/forme [name]</code></td>

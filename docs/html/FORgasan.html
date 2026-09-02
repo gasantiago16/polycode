@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FORgasan · polycode docs</title>
+<style>
+  :root { --fg:#1c2128; --muted:#656d76; --bg:#fff; --side:#f6f8fa; --bd:#d0d7de; --link:#0969da; --code:#f6f8fa; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--fg); background:var(--bg); }
+  .wrap { display:flex; min-height:100vh; }
+  nav { width:260px; flex:0 0 260px; background:var(--side); border-right:1px solid var(--bd); padding:24px 18px; }
+  nav h1 { font-size:18px; margin:0 0 14px; }
+  nav a { display:block; padding:6px 10px; border-radius:6px; color:var(--fg); text-decoration:none; font-size:14px; }
+  nav a:hover { background:#eaeef2; }
+  nav a.active { background:#ddf4ff; color:var(--link); font-weight:600; }
+  main { flex:1; padding:40px 48px; max-width:860px; }
+  a { color:var(--link); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  h1,h2,h3 { line-height:1.25; }
+  h1 { border-bottom:1px solid var(--bd); padding-bottom:.3em; }
+  h2 { border-bottom:1px solid var(--bd); padding-bottom:.3em; margin-top:2em; }
+  code { background:var(--code); padding:.15em .4em; border-radius:6px; font-size:85%; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+  pre { background:var(--code); padding:16px; border-radius:8px; overflow:auto; }
+  pre code { background:none; padding:0; }
+  table { border-collapse:collapse; width:100%; margin:1em 0; display:block; overflow-x:auto; }
+  th,td { border:1px solid var(--bd); padding:6px 12px; text-align:left; }
+  th { background:var(--side); }
+  blockquote { margin:1em 0; padding:.2em 1em; color:var(--muted); border-left:4px solid var(--bd); }
+  footer { color:var(--muted); font-size:13px; margin-top:48px; border-top:1px solid var(--bd); padding-top:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav><h1>polycode docs</h1><a href="index.html">Overview</a>
+<a href="architecture.html">Architecture</a>
+<a href="graph.html">Agent graphs</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="configuration.html">Configuration</a>
+<a href="providers.html">Providers & Models</a>
+<a href="security.html">Security & Keys</a>
+<a href="cli.html">CLI Reference</a>
+<a href="packages.html">Packages</a>
+<a href="deploy.html">Build & Deploy</a>
+<a href="roadmap.html">Roadmap</a>
+<a href="continuity.html">Continuity / Handoff</a>
+<a href="FORgasan.html" class="active">FORgasan</a>
+<a href="beta-survey.html">beta-survey</a>
+<a href="beta-test.html">beta-test</a>
+<a href="buildout-plan.html">buildout-plan</a>
+<a href="demo-script.html">demo-script</a></nav>
+<main>
+<h1>FORgasan — polycode</h1>
+<p>You asked for a handle on what we built. Here it is, without the brochure voice.</p>
+<p>polycode is a <strong>terminal coding agent</strong>: you type, a model thinks, tools run on your files, you get an answer. The twist is we refused to marry one vendor. The same loop drives Grok, Gemini, OpenAI, Muse, NIM, Qwen, and Anthropic. Everything above the adapter speaks one language. That language is ours.</p>
+<p>This is the story of a Claude-Code-shaped TUI sitting on a provider-blind engine, plus the scars we picked up getting multi-agent, security, and a LangGraph-shaped graph <em>without</em> importing LangGraph.</p>
+<hr>
+<h2>What this project is (in one breath)</h2>
+<p>A coding assistant that lives in the terminal, not a website. You run <code>corepack pnpm dev</code> in a repo. It reads the project, calls tools (<code>read</code>, <code>grep</code>, <code>glob</code>, <code>edit</code>, <code>bash</code>, …), asks before dangerous work, and can spawn <strong>one layer</strong> of child agents. Sessions persist as JSON. Keys sit in the OS keychain. Hosted HTTP is a scaffold — local TUI is the real product.</p>
+<p><strong>Status:</strong> experimental local alpha <code>0.1.0-alpha</code>. Private repo <code>gasantiago16/polycode</code>. Node 20/22. ~307 unit tests at the time of writing.</p>
+<p>It is <strong>not</strong> LangChain. It is <strong>not</strong> LangGraph. It is <strong>not</strong> Grok Build cloud. Company isolation is BYOK + docker + no training-tier models by default.</p>
+<hr>
+<h2>The map of the code</h2>
+<p>Think of a building with a locked basement.</p>
+<p>The basement is <code>@polycode/core</code>: canonical messages, the agent loop, permissions, compaction, SSRF, redaction, personas, child spawn. Nothing in <code>core</code> imports a provider SDK. If that rule ever breaks, multi-model is theater.</p>
+<p>Above the basement:</p>
+<table>
+<thead>
+<tr>
+<th>Floor</th>
+<th>Package</th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tools</td>
+<td><code>@polycode/tools</code></td>
+<td>File/shell/web/task tools as <code>ToolSpec</code>s</td>
+</tr>
+<tr>
+<td>Jail</td>
+<td><code>@polycode/sandbox</code></td>
+<td>Local path jail + docker fail-closed + git worktrees</td>
+</tr>
+<tr>
+<td>Keys</td>
+<td><code>@polycode/secrets</code></td>
+<td>Keychain / file / allowlisted <code>.env</code></td>
+</tr>
+<tr>
+<td>Models</td>
+<td><code>@polycode/providers</code></td>
+<td>The <strong>only</strong> AI-SDK-aware code</td>
+</tr>
+<tr>
+<td>Routing</td>
+<td><code>@polycode/router</code></td>
+<td>cheap / strong / long</td>
+</tr>
+<tr>
+<td>Chat UI</td>
+<td><code>@polycode/tui</code></td>
+<td>Ink: composer, overlays, dashboard</td>
+</tr>
+<tr>
+<td>Door</td>
+<td><code>@polycode/cli</code></td>
+<td><code>pnpm dev</code> or <code>--serve</code></td>
+</tr>
+<tr>
+<td>HTTP</td>
+<td><code>@polycode/server</code></td>
+<td>POST <code>/chat</code> SSE (treat as local-only)</td>
+</tr>
+<tr>
+<td>Fan-out</td>
+<td><code>@polycode/workflows</code></td>
+<td>Budgeted parallel/sequential children</td>
+</tr>
+<tr>
+<td>Graphs</td>
+<td><code>@polycode/graph</code></td>
+<td>State + edges + file checkpoints</td>
+</tr>
+<tr>
+<td>Extend</td>
+<td>mcp, plugins, skills, lsp</td>
+<td>MCP, bundles, slash skills, language servers</td>
+</tr>
+</tbody></table>
+<p><code>packages/</code> is a pnpm workspace. <code>cli</code> depends on the others; they depend inward toward <code>core</code>. <code>docs/</code> is the handbook. <code>.polycode/</code> on disk (gitignored) is the <em>runtime</em> house: sessions, worktrees, graph-runs, beta-logs, memory.</p>
+<p><strong>Mental model:</strong> one loop, many skins. TUI and server both construct an <code>Agent</code> and feed it events.</p>
+<hr>
+<h2>Architecture</h2>
+<pre><code>You (terminal)
+    │
+    ▼
+Ink TUI  ── /slash · permission y/a/n · Ctrl+B · dashboard
+    │
+    ▼
+Agent.run()   stream → tool_call → PermissionEngine → sandbox.exec → tool_result → loop
+    │
+    ├── Provider.stream()  (canonical events only)
+    │         ▲
+    │         └── AI SDK adapter (OpenAI / Gemini / xAI / …)
+    │
+    ├── spawnChild  (depth 1: explore | researcher | general | review)
+    ├── workflows   (team, deep-research)
+    └── graph       (nodes = children, checkpoint after each super-step)
+</code></pre>
+<p><strong>Hard law:</strong> the loop, tools, TUI, and graph never see a provider-specific message shape. <code>CanonicalEvent</code> is <code>text_delta | reasoning_delta | tool_call | stop | error</code>. Add a model by writing an adapter, not by forking the agent.</p>
+<p>One <code>provider.stream()</code> is one model turn. We do <strong>not</strong> let the SDK auto-run tools. That is how permission prompts, redaction, and parallel-safe batches stay ours.</p>
+<p>Compaction: at ~85% of the context window, elide old tool bodies, then summarize older turns with the cheap tier. Same behavior on Grok and Gemini.</p>
+<p>Children: max depth 1. Explore/researcher are read-only. Two writers in one turn get worktrees. Background writers need <code>acceptEdits</code> or <code>yolo</code>. Worktree children in ask mode use silent acceptEdits so <code>/team</code> does not click-farm you.</p>
+<p>Graphs: JSON state machine. Nodes are those same children. Edges are fixed or <code>if: { field, includes }</code>. After each super-step we write <code>.polycode/graph-runs/&lt;thread&gt;.json</code>. <code>/graph resume</code> continues the machine, not just the chat.</p>
+<hr>
+<h2>Technologies we chose (and why)</h2>
+<table>
+<thead>
+<tr>
+<th>Choice</th>
+<th>Why</th>
+<th>Tradeoff</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>TypeScript + pnpm 9 workspace</td>
+<td>One language from TUI to sandbox; <code>tsx</code> on <code>src/</code> in dev</td>
+<td>Publishing would need <code>dist</code> mains</td>
+</tr>
+<tr>
+<td>Ink + React 18</td>
+<td>Claude-Code look: <code>&lt;Static&gt;</code> scrollback, no flicker</td>
+<td>Windows Terminal is the real UX test, not vitest</td>
+</tr>
+<tr>
+<td>Vercel AI SDK <strong>behind</strong> our <code>Provider</code></td>
+<td>Fast multi-vendor stream</td>
+<td>SDK majors rename <code>fullStream</code> parts — pin and re-verify</td>
+</tr>
+<tr>
+<td><code>@napi-rs/keyring</code></td>
+<td>Windows DPAPI keychain</td>
+<td>Optional; <code>0600</code> file fallback</td>
+</tr>
+<tr>
+<td>Vitest</td>
+<td>Fast unit tests next to the code</td>
+<td>Does not replace a live TTY</td>
+</tr>
+<tr>
+<td><strong>No</strong> <code>@langchain/langgraph</code></td>
+<td>Would smash canonical types</td>
+<td>We reimplemented the <em>ideas</em> (state, edges, checkpointer)</td>
+</tr>
+</tbody></table>
+<p>We ship via git + Docker, not npmjs. Hosted mode exists so the <em>same</em> <code>Agent</code> can hang off HTTP; it is not a product tenant.</p>
+<p>Contributor/training-tier model ids are refused unless <code>allowTrainingTiers: true</code>. That was a company constraint, not fashion.</p>
+<hr>
+<h2>How the parts talk to each other</h2>
+<p><strong>A normal turn</strong></p>
+<ol>
+<li>You submit text. <code>UserPromptSubmit</code> hooks can block.</li>
+<li>Optional router picks cheap/strong/long.</li>
+<li><code>Agent.run()</code> streams. Text paints at ~10 Hz. Tool calls are buffered, worktrees stamped if two writers, then shown.</li>
+<li>Safe consecutive tools run in parallel. <code>task</code> children that would prompt do not share a batch.</li>
+<li>Permission engine: deny rules and protected paths (<code>.env</code>, <code>.git</code>, <code>.ssh</code>, most of <code>.polycode</code>) first. Then mode. Then prompt.</li>
+<li>Tool <code>run()</code> only talks to <code>ctx.sandbox</code>. No raw <code>fs</code> in tools.</li>
+<li>Output is <code>redactSecrets</code>’d. Results go back as a <code>tool</code> message. Loop or stop.</li>
+<li>Session JSON is written under <code>.polycode/sessions/</code>.</li>
+</ol>
+<p><strong>A graph turn</strong></p>
+<p><code>/graph research-implement add a comment</code> compiles a def, creates a thread id, runs <code>explore</code> then <code>implement</code> (worktree), checkpoints after each node, prints the run. Crash mid-graph? <code>/graph resume &lt;id&gt;</code>.</p>
+<p><strong>A buddy on your box</strong></p>
+<p>Ask mode, not yolo. Their Grok key or yours via <code>/settings</code>. Survey at <code>docs/beta-survey.html</code>. Logs stay gitignored.</p>
+<hr>
+<h2>Bugs, scars, and how we fixed them</h2>
+<p>These are real. They came from cranky reviews and Jared sitting at the TUI.</p>
+<h3>Scar 1 — Safe tools skipped the jail</h3>
+<p><strong>What.</strong> Early permission code short-circuited <code>safe</code> tools before deny/protect. <code>read</code> of <code>.env</code> could auto-allow.</p>
+<p><strong>Root.</strong> Convenience: “safe means skip the gate.”</p>
+<p><strong>Fix.</strong> Deny rules and <code>isProtectedInput</code> run first. Tests for <code>.env</code> reads and bash that names <code>.env</code>.</p>
+<p><strong>Lesson.</strong> Order of checks is a security feature. Write the order down and test it.</p>
+<h3>Scar 2 — <code>.env</code> as RCE</h3>
+<p><strong>What.</strong> <code>loadDotEnvFiles</code> copied every <code>KEY=VALUE</code> into <code>process.env</code>. A repo <code>.env</code> could set <code>NODE_OPTIONS</code> / <code>HTTPS_PROXY</code>. Child node/npm would load attacker code or leak keys.</p>
+<p><strong>Root.</strong> dotenv cargo-cult: “load the file like everyone else.”</p>
+<p><strong>Fix.</strong> Allowlist provider keys and aliases only. Refuse <code>NODE_OPTIONS</code>, proxies, <code>POLYCODE_AUTH_TOKEN</code>. Realpath jail. <code>childProcessEnv</code> strips loader-injection names even on MCP overrides.</p>
+<p><strong>Lesson.</strong> Untrusted files do not get to write process env. Allowlist, don’t denylist.</p>
+<h3>Scar 3 — Background children that could not work</h3>
+<p><strong>What.</strong> <code>forkSilent()</code> used a deny stub. In <code>acceptEdits</code>, bash still “prompts,” which became silent deny. Background writers were advertised and then toothless except in yolo.</p>
+<p><strong>Root.</strong> Silent ≠ read-only, but we implemented it that way.</p>
+<p><strong>Fix.</strong> Silent acceptEdits auto-allows mutating and dangerous (still blocks protected paths). Ask/plan silent stays plan. Worktree children use <code>forkIsolated()</code>.</p>
+<p><strong>Lesson.</strong> A background feature that cannot run its tools is a trap. Name the policy.</p>
+<h3>Scar 4 — Ctrl+B leftover bomb / dashboard remount</h3>
+<p><strong>What.</strong> <code>demoteTurn</code> survived an abort during <code>stream()</code>, so the <em>next</em> tool turn no-op’d. Dashboard <code>key={dashTick}</code> remounted every 400ms; peek/attach reset. <code>/loop 25d</code> overflowed <code>setInterval</code> to 1ms.</p>
+<p><strong>Root.</strong> Flags on the Agent instead of the <code>run()</code> call; React keys as a refresh hack; no cap on interval math.</p>
+<p><strong>Fix.</strong> Clear <code>demoteTurn</code> in <code>finally</code>. Refresh dashboard data without remounting. Cap loops at 24h; monotonic ids <code>l1, l2, l3</code>.</p>
+<p><strong>Lesson.</strong> UI refresh ≠ remount. Timeouts need a numeric ceiling. Abort paths need <code>finally</code>.</p>
+<h3>Scar 5 — Jared’s beta: permission spam and <code>/hepl</code></h3>
+<p><strong>What.</strong> He rated permissions 2/5. Grok used <code>bash</code> + <code>wc</code> to count <code>.py</code> files (Windows has no <code>wc</code>), so every count was a prompt plus a failure plus a retry. <code>/hepl</code> was correctly <em>not</em> sent to the model, but the red <code>unknown /hepl</code> line looked like a crash. He marked it fail. He would use the product again (4/5 overall).</p>
+<p><strong>Root.</strong> Tool descriptions did not forbid bash-for-inventory. Error chrome implied failure.</p>
+<p><strong>Fix.</strong> <code>glob</code> returns <code>N files</code> then the list. System prompt: glob/grep/ls for listing. Repeat bash prompts lead with <strong><code>a</code> allow bash this session</strong>. <code>/hepl</code> is a system line: not sent, did you mean <code>/help</code>?</p>
+<p><strong>Lesson.</strong> Testers grade what they <em>see</em>. A correct guard with hostile copy is still a fail. Models will use the noisiest tool you leave lying around.</p>
+<h3>Scar 6 — We are not LangGraph (and that was confusing)</h3>
+<p><strong>What.</strong> It felt like “a series of LangGraph agents with persistence.” The code was a ReAct loop + <code>/team</code>. No graph, no checkpointer.</p>
+<p><strong>Root.</strong> Multi-agent fan-out looks like a graph from the outside.</p>
+<p><strong>Fix.</strong> <code>@polycode/graph</code>: state, nodes-as-children, edges, file checkpoints. Documented as <em>shaped like</em> LangGraph, not <em>imported from</em> it.</p>
+<p><strong>Lesson.</strong> Name the runtime honestly. If you want a state machine, build one on your loop — don’t pretend spawn is a DAG.</p>
+<hr>
+<h2>Pitfalls to avoid next time</h2>
+<ul>
+<li><strong>Do not</strong> let vitest crawl <code>.polycode/worktrees/</code>. Jared’s <code>/team</code> left a copy of the repo; tests ran twice and some packages had no <code>node_modules</code>. Exclude <code>.polycode/**</code>.</li>
+<li><strong>Do not</strong> treat <code>busy</code> React state as the mutex. <code>busyRef.current = busy</code> on every render undoes a synchronous lock. Own the ref in acquire/release.</li>
+<li><strong>Do not</strong> share one <code>PermissionEngine</code> across parallel children. Concurrent <code>setPerm</code> orphans a prompt and hangs a child.</li>
+<li><strong>Do not</strong> follow persona or <code>.env</code> symlinks. <code>realpath</code> must stay under the intended directory; skip non-files.</li>
+<li><strong>Do not</strong> load project <code>.env</code> into <code>NODE_OPTIONS</code>. Allowlist keys.</li>
+<li><strong>Do not</strong> use <code>key={tick}</code> to live-update an overlay. You will destroy selection state.</li>
+<li><strong>Do not</strong> pass parent <code>AbortSignal</code> into <code>waitChild</code> when <code>timeout_ms=0</code>. That turns a snapshot into “wait forever.”</li>
+<li><strong>Do not</strong> merge a cranky <strong>REJECT</strong>. Nits can ship; open bugs cannot (<code>POLYCODE.md</code>).</li>
+<li><strong>Do not</strong> expose <code>--serve</code> on an untrusted network. Hosted auth exists; tenant isolation does not.</li>
+</ul>
+<hr>
+<h2>What good engineers did here</h2>
+<ul>
+<li><strong>Canonical seam first.</strong> Types in <code>core</code>, adapter at the edge. That is why Grok-only first-run and Muse-as-alias could land without rewriting the TUI.</li>
+<li><strong>Deny before convenience.</strong> Protected paths beat “it’s a read.”</li>
+<li><strong>Cranky as a gate.</strong> Diagnose → implement → <code>/review</code> → <code>pnpm test</code> → merge. Round-trip until APPROVE.</li>
+<li><strong>Tests next to the bug.</strong> 267 → 307 as we closed races: child cap, waitChild snapshot, <code>/hepl</code> copy, glob counts, graph resume.</li>
+<li><strong>Gitignored runtime.</strong> Sessions, keys, beta-logs, graph-runs never belong in a PR.</li>
+<li><strong>Small squash PRs</strong> to <code>main</code> (<code>#5</code> harness, <code>#6</code> TUI/kernel, <code>#7</code> hardening, <code>#8</code> spam/<code>hepl</code>, <code>#9</code> graphs).</li>
+<li><strong>Buddy-in-the-chair.</strong> Automated green is not UX. Jared’s 2/5 on prompts was worth more than another catalog test.</li>
+<li><strong>Copy as product.</strong> “Not sent to the model” vs “unknown command.”</li>
+</ul>
+<hr>
+<h2>Lessons you can steal</h2>
+<ol>
+<li><strong>Own the tool loop.</strong> If the SDK runs tools, you do not have permissions, redaction, or a dashboard.</li>
+<li><strong>One depth of children is a feature.</strong> Nested swarms are how you lose the plot and the bill.</li>
+<li><strong>Silent engines need an explicit policy.</strong> Deny-stub is not “non-interactive acceptEdits.”</li>
+<li><strong>Persist the machine and the chat separately.</strong> Transcripts (<code>sessions/</code>) ≠ graph threads (<code>graph-runs/</code>).</li>
+<li><strong>Windows is a provider.</strong> <code>wc</code> is not a tool. Glob is.</li>
+<li><strong>Allowlist untrusted config.</strong> <code>.env</code> and MCP env overlays are attack surface.</li>
+<li><strong>Refresh data, don’t remount UI.</strong></li>
+<li><strong>Write the narrative when the scars are fresh.</strong> That is this file.</li>
+</ol>
+<hr>
+<h2>Where to go next</h2>
+<ol>
+<li><strong>Live TTY pass</strong> of <code>/graph explore …</code> and <code>/graph research-implement …</code> on Windows Terminal after a restart (this FORME was written as graphs landed on <code>main</code> at <code>a9a0186</code>).</li>
+<li><strong>Hosted mode</strong> is still a scaffold: do not put it on a public bind. Tenant isolation is unsolved.</li>
+<li><strong>Capability numbers</strong> in the provider catalog are estimates — pin them against current vendor docs when compaction misbehaves.</li>
+<li><strong>Graph v1 has no cross-thread store.</strong> Long-term facts still go in <code>.polycode/memory.md</code>. Decide if that is enough.</li>
+<li><strong>Ask-mode bash</strong> will still prompt when the model truly needs a shell. Teach <code>a</code> for session; don’t silently yolo.</li>
+<li><strong>Smoke the non-Grok providers</strong> if you claim multi-model in a demo. Jared’s session was <code>xai:grok-4.3</code> only.</li>
+<li><strong>Decide the pygame tic-tac-toe file</strong> sitting untracked under <code>examples/</code> — it is not part of the agent.</li>
+</ol>
+<h3>Glossary</h3>
+<table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Canonical</td>
+<td>Our message/event/tool types; adapters translate to/from vendors</td>
+</tr>
+<tr>
+<td>ReAct loop</td>
+<td>Stream → tools → observe → repeat until <code>end_turn</code></td>
+</tr>
+<tr>
+<td>Depth 1</td>
+<td>Children cannot spawn children</td>
+</tr>
+<tr>
+<td>Worktree</td>
+<td>Detached git copy; <code>/worktree apply</code> copies back</td>
+</tr>
+<tr>
+<td>forkSilent</td>
+<td>Child permission engine that never pops the TUI</td>
+</tr>
+<tr>
+<td>Super-step</td>
+<td>One tick of a graph: run all ready nodes, checkpoint</td>
+</tr>
+<tr>
+<td>Cranky</td>
+<td>Structured review; REJECT if any open bug</td>
+</tr>
+</tbody></table>
+<hr>
+<p><em>Written for Gasan, 2026-08-31, from the repo as it actually is — not the slide.</em></p>
+
+<footer>Generated from <code>docs/*.md</code> by <code>scripts/build-docs.ts</code> — run <code>corepack pnpm docs</code> to refresh.</footer>
+</main>
+</div>
+</body>
+</html>
