@@ -41,4 +41,9 @@ describe("formatStatusLine", () => {
       "openai:gpt-5.5 ask app",
     );
   });
+
+  it("appends running child count", () => {
+    const line = formatStatusLine(DEFAULT_STATUS_TEMPLATE, { ...base, kids: 3 });
+    expect(line).toContain("c:3");
+  });
 });

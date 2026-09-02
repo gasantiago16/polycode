@@ -53,7 +53,9 @@ The default tool registry (`tools`), each a `ToolSpec` with a permission class:
 | `edit` | mutating | exact-string replace (errors if absent) |
 | `bash` | dangerous | shell command with timeout |
 | `grep` | safe | regex over file contents |
-| `glob` | safe | simple `*`/`**` file matching |
+| `glob` | safe | simple `*`/`**` file matching; first line is the match count |
+| `task` / `task_wait` / `task_kill` | mutating | parent-only child spawn / wait / kill |
+| `graph` | mutating | parent-only named graph run (checkpointed) |
 | `memory` | mutating | curated `.polycode/memory.md` (`read`/`append`/`replace`) |
 
 ## `@polycode/sandbox`

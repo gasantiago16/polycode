@@ -3,4 +3,5 @@ export { compileGraph, GraphCompileError, type CompiledGraph } from "./compile.j
 export { runGraph, formatGraphRun, type RunGraphOpts } from "./run.js";
 export { FileCheckpointStore, assertThreadId } from "./checkpoint.js";
 export { expandTemplate, mergeState } from "./reduce.js";
+export { formatGraphDef, formatGraphProgress } from "./format.js";
 export { loadGraphs, bundledGraphs, parseGraphDef, newThreadId, type LoadedGraph, type GraphSource } from "./load.js";

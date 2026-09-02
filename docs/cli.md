@@ -58,8 +58,9 @@ Sessions are stored as `<cwd>/.polycode/sessions/<id>.json` and saved after each
 | `/worktree remove <id>` | `git worktree remove --force` that tree. |
 | `/workflows` | Bundled + `.polycode/workflows/*.json` + `~/.config/polycode/workflows/*.json`. |
 | `/workflow <name> [query]` | Run a named JSON workflow (parallel, then sequential `steps`, then synthesize). Budgeted. |
-| `/graphs` | Bundled + `.polycode/graphs/*.json` agent graphs. |
-| `/graph <name> [query]` | Run a checkpointed graph (`/graph resume <id>`, `/graph status <id>`). |
+| `/graphs` | Bundled + `.polycode/graphs/*.json` agent graphs (ASCII DAG). |
+| `/graph show <name>` | Print a graph's DAG. |
+| `/graph <name> [query]` | Run a checkpointed graph (`/graph resume <id>`, `/graph status <id>`). Stage-safe: `/graph demo …`. |
 | `/forme [name]` | Skill: FOR{Name}.md + visual HTML (SVG, no image gen). |
 | `/matsumura-style [args]` | Skill: Matsumura/Sturzinger memo. |
 | `/deep-research <q>` | Budgeted workflow: 3 researcher children, then a synthesize child writes `docs/research/<slug>.md`. |

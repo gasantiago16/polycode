@@ -44,9 +44,11 @@
 <a href="deploy.html">Build & Deploy</a>
 <a href="roadmap.html">Roadmap</a>
 <a href="continuity.html">Continuity / Handoff</a>
+<a href="FORgasan.html">FORgasan</a>
 <a href="beta-survey.html">beta-survey</a>
 <a href="beta-test.html">beta-test</a>
-<a href="buildout-plan.html">buildout-plan</a></nav>
+<a href="buildout-plan.html">buildout-plan</a>
+<a href="demo-script.html">demo-script</a></nav>
 <main>
 <h1>Packages</h1>
 <p>A pnpm monorepo. Packages depend inward toward <code>core</code>; nothing in <code>core</code> depends on a
@@ -125,7 +127,17 @@ per-provider <code>Capabilities</code>. Deps: <code>ai</code>, <code>@ai-sdk/ope
 <tr>
 <td><code>glob</code></td>
 <td>safe</td>
-<td>simple <code>*</code>/<code>**</code> file matching</td>
+<td>simple <code>*</code>/<code>**</code> file matching; first line is the match count</td>
+</tr>
+<tr>
+<td><code>task</code> / <code>task_wait</code> / <code>task_kill</code></td>
+<td>mutating</td>
+<td>parent-only child spawn / wait / kill</td>
+</tr>
+<tr>
+<td><code>graph</code></td>
+<td>mutating</td>
+<td>parent-only named graph run (checkpointed)</td>
 </tr>
 <tr>
 <td><code>memory</code></td>

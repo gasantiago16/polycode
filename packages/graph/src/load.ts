@@ -107,6 +107,22 @@ export function bundledGraphs(): LoadedGraph[] {
   return [
     {
       source: "bundled",
+      name: "demo",
+      description: "Stage-safe: one explore child, no worktree",
+      nodes: {
+        explore: {
+          subagent_type: "explore",
+          prompt:
+            "Read-only. In at most 8 bullets: what is this repo, how the agent loop works, and how /graph differs from /team. Cite file paths. Do not edit.\n\nFocus:\n{{query}}",
+        },
+      },
+      edges: [
+        { from: START, to: "explore" },
+        { from: "explore", to: END },
+      ],
+    },
+    {
+      source: "bundled",
       name: "explore",
       description: "Single read-only explore child (checkpointed)",
       nodes: {

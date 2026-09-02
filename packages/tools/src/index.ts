@@ -7,6 +7,7 @@ import {
 } from "@polycode/core";
 import { task } from "./task.js";
 import { taskKill, taskWait } from "./task-ctl.js";
+import { graphTool } from "./graph.js";
 import { webFetch } from "./web.js";
 import { webSearch } from "./search.js";
 import { todoWrite } from "./todo.js";
@@ -572,6 +573,7 @@ export const tools: ToolSpec[] = [
   task,
   taskWait,
   taskKill,
+  graphTool,
   webFetch,
   webSearch,
   todoWrite,
@@ -589,6 +591,7 @@ export {
   task,
   taskWait,
   taskKill,
+  graphTool,
   webFetch,
   webSearch,
   todoWrite,

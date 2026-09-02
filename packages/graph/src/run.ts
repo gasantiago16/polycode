@@ -11,10 +11,16 @@ export interface RunGraphOpts {
   input?: Record<string, unknown>;
   /** Continue an interrupted/failed thread. */
   resume?: boolean;
+  /** Fired after each checkpoint write (progress UI). */
+  onStep?: (cp: GraphCheckpoint) => void;
 }
 
 export async function runGraph(opts: RunGraphOpts): Promise<GraphCheckpoint> {
-  const { compiled, host, store } = opts;
+  const { compiled, host, store, onStep } = opts;
+  const ping = (c: GraphCheckpoint) => {
+    store.save(c);
+    onStep?.(c);
+  };
   const threadId = assertThreadId(opts.threadId);
   const def = compiled.def;
   const maxSteps = def.maxSteps ?? 16;
@@ -48,13 +54,13 @@ export async function runGraph(opts: RunGraphOpts): Promise<GraphCheckpoint> {
     };
   }
 
-  store.save(cp);
+  ping(cp);
 
   while (cp.status === "running") {
     const next = cp.next.filter((n) => n && n !== END);
     if (!next.length) {
       cp = { ...cp, status: "completed", next: [], updatedAt: now() };
-      store.save(cp);
+      ping(cp);
       break;
     }
     if (cp.steps >= maxSteps) {
@@ -64,14 +70,14 @@ export async function runGraph(opts: RunGraphOpts): Promise<GraphCheckpoint> {
         error: `maxSteps ${maxSteps} reached`,
         updatedAt: now(),
       };
-      store.save(cp);
+      ping(cp);
       break;
     }
 
     const gate = next.filter((n) => interrupt.has(n));
     if (gate.length && !skipInterrupt) {
       cp = { ...cp, status: "interrupted", next, updatedAt: now() };
-      store.save(cp);
+      ping(cp);
       break;
     }
     skipInterrupt = false;
@@ -79,7 +85,7 @@ export async function runGraph(opts: RunGraphOpts): Promise<GraphCheckpoint> {
     const missing = next.filter((n) => !def.nodes[n]);
     if (missing.length) {
       cp = { ...cp, status: "failed", error: `unknown node "${missing[0]}"`, updatedAt: now() };
-      store.save(cp);
+      ping(cp);
       break;
     }
 
@@ -127,7 +133,7 @@ export async function runGraph(opts: RunGraphOpts): Promise<GraphCheckpoint> {
       error: failed ? `${failed.id}: ${failed.r.output.slice(0, 400)}` : undefined,
       updatedAt: now(),
     };
-    store.save(cp);
+    ping(cp);
   }
 
   return cp;

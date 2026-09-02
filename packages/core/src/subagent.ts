@@ -53,7 +53,7 @@ const EXPLORE_TOOLS = new Set(["read", "grep", "ls", "glob", "lsp"]);
 const REVIEW_TOOLS = new Set(["read", "grep", "ls", "glob", "write", "lsp"]);
 const RESEARCHER_TOOLS = new Set(["read", "grep", "ls", "glob", "web_fetch", "web_search"]);
 
-const PARENT_ONLY = new Set(["task", "task_wait", "task_kill"]);
+const PARENT_ONLY = new Set(["task", "task_wait", "task_kill", "graph"]);
 
 export function toolsForChild(type: string, parentTools: ToolSpec[]): ToolSpec[] {
   const withoutTask = parentTools.filter((t) => !PARENT_ONLY.has(t.name));

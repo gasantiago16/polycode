@@ -23,7 +23,7 @@ seam and pull a second agent stack.
 ## Authoring
 
 Project file `.polycode/graphs/<name>.json` (or `graphs/` under the user config dir).
-Bundled: `explore`, `research-implement`.
+Bundled: `demo` (stage-safe one-node explore, no worktree), `explore`, `research-implement`.
 
 ```json
 {
@@ -58,14 +58,19 @@ for `/graph resume <thread>`.
 
 | Command | Effect |
 |---|---|
-| `/graphs` | Bundled + user + project graphs |
-| `/graph <name> [query]` | Compile, run, checkpoint each super-step |
+| `/graphs` | Bundled + user + project graphs, each with a one-line ASCII DAG |
+| `/graph show <name>` | Full DAG + description |
+| `/graph <name> [query]` | Compile, run, checkpoint each super-step (progress lines as it goes) |
 | `/graph` / `/graph list` | Saved threads under `.polycode/graph-runs/` |
 | `/graph status <id>` | Dump checkpoint |
 | `/graph resume <id>` | Continue interrupted/failed |
 
+The parent also has a `graph` tool (stripped from children) so the model can invoke a named
+pipeline instead of chaining `task` calls. Statusline shows `c:N` while children run;
+`/dashboard` prints the last graph thread under the child list.
+
 Each node is a depth-1 child: same tools, sandbox, permission engine as `/team`. Worktree
-nodes still isolate writes.
+nodes still isolate writes. Prefer `/graph demo <query>` on a live stage — it is explore-only.
 
 ## Persistence
 
