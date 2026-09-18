@@ -69,7 +69,7 @@ provider-blind agent engine.
 
 ## Repo
 
-- `gasantiago16/polycode` (**private**), default branch `main`.
+- `gasantiago16/polycode` (**public**, experimental alpha), default branch `main`.
 - Commits: baseline scaffold → secure key setup + smoke harness → docs.
 
 ## Next steps (suggested order)

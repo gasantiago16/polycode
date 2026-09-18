@@ -5,10 +5,12 @@ the same agent engine drives **OpenAI**, **Google Gemini**, **xAI (Grok)**, **Me
 **NVIDIA NIM**, **Qwen**, and **Anthropic** — with runtime model switching, smart routing,
 and an optional hosted server mode.
 
-> Status: **experimental local alpha (`0.1.0-alpha`)**. The local agent loop, tools,
+> Status: **public, experimental local alpha (`0.1.0-alpha`)**. The local agent loop, tools,
 > permissions, TUI, routing, and session persistence work end-to-end and have an automated
 > regression suite. Provider compatibility still needs live verification. Hosted mode is an
 > unsafe scaffold and must not be exposed to untrusted networks.
+
+**Clone without a key:** `pnpm install && pnpm test && pnpm typecheck` (CI also builds on Node 20/22, Ubuntu / Windows / macOS). Live chat needs a gitignored `.env` or OS keychain.
 
 ## Supported baseline
 

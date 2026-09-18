@@ -31,4 +31,4 @@ Vercel AI SDK. That seam is what makes "multiple API models" tractable. Keys are
 on first run via a masked prompt and stored in the OS keychain. The same engine runs
 locally in an Ink TUI or behind an HTTP+SSE server.
 
-Repo: `gasantiago16/polycode` (private).
+Repo: [`gasantiago16/polycode`](https://github.com/gasantiago16/polycode) (public, experimental alpha).

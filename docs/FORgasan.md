@@ -12,7 +12,7 @@ This is the story of a Claude-Code-shaped TUI sitting on a provider-blind engine
 
 A coding assistant that lives in the terminal, not a website. You run `corepack pnpm dev` in a repo. It reads the project, calls tools (`read`, `grep`, `glob`, `edit`, `bash`, …), asks before dangerous work, and can spawn **one layer** of child agents. Sessions persist as JSON. Keys sit in the OS keychain. Hosted HTTP is a scaffold — local TUI is the real product.
 
-**Status:** experimental local alpha `0.1.0-alpha`. Private repo `gasantiago16/polycode`. Node 20/22. ~307 unit tests at the time of writing.
+**Status:** experimental local alpha `0.1.0-alpha`. Public repo `gasantiago16/polycode`. Node 20/22. ~307 unit tests at the time of writing.
 
 It is **not** LangChain. It is **not** LangGraph. It is **not** Grok Build cloud. Company isolation is BYOK + docker + no training-tier models by default.
 
